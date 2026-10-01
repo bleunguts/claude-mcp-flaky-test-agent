@@ -1,0 +1,5 @@
+<Solution>
+  <Folder Name="/sandbox/">
+    <Project Path="sandbox/FlakyLab/FlakyLab.csproj" />
+  </Folder>
+</Solution>

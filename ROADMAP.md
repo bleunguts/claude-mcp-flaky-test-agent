@@ -2,13 +2,13 @@
 
 A step-by-step build of an MCP server and a hand-written agentic loop that investigates flaky tests, proposes and verifies fixes, and raises pull requests. The project doubles as a guided tour of agentic architecture: the tool producer (MCP server), the tool orchestrator (the loop), and the guardrails around them are each built in the open, one small session at a time.
 
-**Status:** Session 1 in progress.
+**Status:** Session 1 complete, Session 2 next.
 
 ## Sessions
 
 | # | Session | API credits? | Status |
 |---|---|---|---|
-| 1 | Architecture + FlakyLab sandbox | No | In progress |
+| 1 | Architecture + FlakyLab sandbox | No | Done |
 | 2 | MCP server scaffold + `run_test_n_times` tool (`dotnet test --filter`, parse .trx), tested in MCP Inspector | No | Planned |
 | 3 | Code analyzer tools (`read_source`, plus a way to find the implementation for a test) | No | Planned |
 | 4 | Hand-coded agentic loop: Anthropic C# SDK + MCP client | Yes | Planned |
@@ -70,7 +70,7 @@ Enforced in the agent and finalised in Session 8:
 
 The agent needs a test bed where the answers are already known. `sandbox/FlakyLab/FlakyLabTests.cs` contains several flaky tests, each with a different root cause, plus a stable control test that the agent must leave alone. The root causes are recorded only in a ground-truth file kept outside the repository and used for scoring, so the tests carry no explanatory comments.
 
-Remaining steps: create the solution and add the sandbox project. On .NET 10, `dotnet new sln` produces a `.slnx` file by default.
+The solution file and the sandbox project are in place. On .NET 10, `dotnet new sln` produces a `.slnx` file by default.
 
 ```bash
 dotnet new sln -n FlakyDetective
@@ -78,7 +78,7 @@ dotnet sln add sandbox/FlakyLab
 for i in {1..10}; do dotnet test sandbox/FlakyLab --nologo -v q | tail -1; done
 ```
 
-**Done when:** the 10 runs show different pass/fail counts.
+**Done when:** the 10 runs show different pass/fail counts. Confirmed: ten consecutive runs gave between 1 and 4 failures out of 6 tests.
 
 ## Session 2 design question
 

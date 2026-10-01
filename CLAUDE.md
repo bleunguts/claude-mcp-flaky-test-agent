@@ -15,7 +15,7 @@ The aim is to understand agentic architecture from the inside, not just drive AI
 ```
 src/FlakyDetective.Agent      -> tool ORCHESTRATOR: Anthropic C# SDK (Messages API) + MCP client, hand-written loop
 src/FlakyDetective.McpServer  -> tool PRODUCER: ModelContextProtocol C# SDK, stdio transport, [McpServerTool] handlers
-sandbox/FlakyLab              -> xUnit project with deliberately flaky tests: the "crime scene"
+sandbox/FlakyLab              -> NUnit project with deliberately flaky tests: the "crime scene"
 ```
 Planned MCP tools: `get_flaky_candidates` (TeamCity REST), `run_test_n_times`, `read_source`, `git_branch_commit_pr`, `notify`.
 
@@ -29,7 +29,7 @@ Planned MCP tools: `get_flaky_candidates` (TeamCity REST), `run_test_n_times`, `
 ## Packages
 - `Anthropic`: official C# SDK, v10+ (not the old tryAGI package)
 - `ModelContextProtocol` (+ `Microsoft.Extensions.Hosting` for the server)
-- xUnit for the sandbox
+- NUnit for the sandbox
 
 ## API access
 Claude Code runs on my Pro login. The Agent project (Session 4+) calls the Claude API directly and needs a Console API key with credits. The key goes in the `ANTHROPIC_API_KEY` env var, never in the repo.

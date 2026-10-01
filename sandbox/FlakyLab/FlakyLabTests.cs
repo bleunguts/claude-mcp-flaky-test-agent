@@ -1,6 +1,8 @@
 using System.Collections.Concurrent;
 using System.Diagnostics;
-using Xunit;
+using NUnit.Framework;
+
+[assembly: Parallelizable(ParallelScope.Fixtures)]
 
 namespace FlakyLab;
 
@@ -49,61 +51,61 @@ public class NotionalGenerator
 
 public class QuoteServiceTests
 {
-    [Fact]
+    [Test]
     public async Task GetMid_returns_within_sla()
     {
         var sw = Stopwatch.StartNew();
         await new QuoteService().GetMidAsync("EURUSD");
-        Assert.True(sw.ElapsedMilliseconds < 30, $"Took {sw.ElapsedMilliseconds}ms");
+        Assert.That(sw.ElapsedMilliseconds, Is.LessThan(30), $"Took {sw.ElapsedMilliseconds}ms");
     }
 
-    [Fact]
+    [Test]
     public async Task Mid_is_positive()
     {
         var mid = await new QuoteService().GetMidAsync("EURUSD");
-        Assert.True(mid > 0);
+        Assert.That(mid, Is.GreaterThan(0));
     }
 }
 
 public class RateCacheWriterTests
 {
-    [Fact]
+    [Test]
     public async Task Writer_sets_eurusd()
     {
         RateCache.Rates["EURUSD"] = 1.10m;
         await Task.Delay(25);
-        Assert.Equal(1.10m, RateCache.Rates["EURUSD"]);
+        Assert.That(RateCache.Rates["EURUSD"], Is.EqualTo(1.10m));
     }
 }
 
 public class RateCacheResetTests
 {
-    [Fact]
+    [Test]
     public async Task Reset_clears_cache()
     {
         RateCache.Rates.Clear();
         await Task.Delay(25);
-        Assert.Empty(RateCache.Rates);
+        Assert.That(RateCache.Rates, Is.Empty);
     }
 }
 
 public class TradeBlotterTests
 {
-    [Fact]
+    [Test]
     public async Task Publish_adds_trade_to_blotter()
     {
         var blotter = new TradeBlotter();
         blotter.PublishFireAndForget("T1");
         await Task.Delay(10);
-        Assert.Contains("T1", blotter.Published);
+        Assert.That(blotter.Published, Does.Contain("T1"));
     }
 }
 
 public class NotionalGeneratorTests
 {
-    [Fact]
+    [Test]
     public void Generated_notional_is_at_least_1m()
     {
-        Assert.True(new NotionalGenerator().Next() >= 1_000_000m);
+        Assert.That(new NotionalGenerator().Next(), Is.GreaterThanOrEqualTo(1_000_000m));
     }
 }

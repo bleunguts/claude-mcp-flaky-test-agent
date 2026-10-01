@@ -6,4 +6,4 @@ An agent that investigates flaky tests, built in C#/.NET.
 - **Agent**: a hand-written agentic loop on the Anthropic C# SDK that consumes those tools as an MCP client
 - **sandbox/FlakyLab**: NUnit tests with deliberately flaky behaviour for the agent to diagnose
 
-Work in progress.
+See [ROADMAP.md](ROADMAP.md) for the session plan and current status.

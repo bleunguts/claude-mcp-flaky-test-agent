@@ -35,18 +35,7 @@ Planned MCP tools: `get_flaky_candidates` (TeamCity REST), `run_test_n_times`, `
 Claude Code runs on my Pro login. The Agent project (Session 4+) calls the Claude API directly and needs a Console API key with credits. The key goes in the `ANTHROPIC_API_KEY` env var, never in the repo.
 
 ## Session plan
-| # | Session | API credits? |
-|---|---|---|
-| 1 | Architecture + FlakyLab sandbox | No |
-| 2 | MCP server scaffold + `run_test_n_times` (`dotnet test --filter`, parse .trx), test in MCP Inspector | No |
-| 3 | Code analyzer tools (`read_source`, find the implementation for a test) | No |
-| 4 | Hand-coded agentic loop: Anthropic SDK + MCP client | Yes |
-| 5 | Investigation prompt + first diagnoses, scored against ground truth | Yes |
-| 6 | TeamCity in Docker + `get_flaky_candidates` | No |
-| 7 | Fix → verify 10x → git branch/PR tools | Yes |
-| 8 | Notifier, guardrails, audit log, final scorecard | Light |
-
-Open design question: a test that fails about 10% of the time passes 5 reruns about 59% of the time. `run_test_n_times` should return counts, durations and failure messages so Claude can reason about uncertainty and ask for more runs.
+The session plan, status and open design questions live in [ROADMAP.md](ROADMAP.md), which is the single source of truth. Update its status line and table at the end of each session.
 
 ## Session log
 - Session 1 (in claude.ai): architecture agreed; FlakyLabTests.cs written (4 flaky + 1 stable control). Next: wire up the sandbox project, then Session 2.

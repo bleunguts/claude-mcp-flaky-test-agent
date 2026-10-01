@@ -9,6 +9,7 @@ The aim is to understand agentic architecture from the inside, not just drive AI
 ## How to work with me
 - I'm learning as I build. Work in **bite-sized sessions**: explain the concept briefly first, then build. One topic per session.
 - Let me write or approve the key code, especially the agentic loop. Don't silently generate large chunks.
+- Follow the shared workflow in `~/.claude/CLAUDE.md` (issue -> `feature/<n>-name` branch -> PR with `Closes #N`). Each PR updates the status table in ROADMAP.md.
 - At the end of each session, update the Session log below (one or two lines) and suggest a commit message.
 
 ## Architecture

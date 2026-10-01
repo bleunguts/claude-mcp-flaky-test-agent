@@ -1,0 +1,8 @@
+bin/
+obj/
+.vs/
+*.user
+TestResults/
+.env
+.env.*
+GROUND_TRUTH.md

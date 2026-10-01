@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "deny": [
+      "Read(~/flakylab-private/**)",
+      "Read(./.env)",
+      "Read(./.env.*)"
+    ]
+  }
+}

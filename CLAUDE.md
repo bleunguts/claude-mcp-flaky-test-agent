@@ -1,0 +1,52 @@
+# FlakyLab — MCP + Agentic Flaky Test Detective
+
+## What this is
+A C#/.NET agent that hunts down flaky tests. It's built from two parts:
+> an MCP server (the tool **producer**) and a hand-coded agentic loop that consumes it as an MCP client (the tool **orchestrator**). Together they investigate flaky tests, propose and verify fixes, and raise PRs.
+
+The aim is to understand agentic architecture from the inside, not just drive AI tools. Favour clear, explicit code whose design I can walk someone through in person over clever abstractions.
+
+## How to work with me
+- I'm learning as I build. Work in **bite-sized sessions**: explain the concept briefly first, then build. One topic per session.
+- Let me write or approve the key code, especially the agentic loop. Don't silently generate large chunks.
+- At the end of each session, update the Session log below (one or two lines) and suggest a commit message.
+
+## Architecture
+```
+src/FlakyDetective.Agent      -> tool ORCHESTRATOR: Anthropic C# SDK (Messages API) + MCP client, hand-written loop
+src/FlakyDetective.McpServer  -> tool PRODUCER: ModelContextProtocol C# SDK, stdio transport, [McpServerTool] handlers
+sandbox/FlakyLab              -> xUnit project with deliberately flaky tests: the "crime scene"
+```
+Planned MCP tools: `get_flaky_candidates` (TeamCity REST), `run_test_n_times`, `read_source`, `git_branch_commit_pr`, `notify`.
+
+## Hard rules
+- **Hand-code the loop.** Use `client.Messages.Create` and handle `tool_use` → MCP `CallToolAsync` → `tool_result` → repeat until `end_turn`. Do NOT use `IChatClient` + `UseFunctionInvocation()`, because that automates the exact thing I need to demonstrate.
+- The MCP server contains **no LLM calls**. It's deterministic C#.
+- The server uses stdio, so **log to stderr only**. stdout is the protocol channel.
+- **Do not diagnose or fix the sandbox tests yourself, and don't add comments explaining why they flake.** Finding the causes is the agent's job, and I score it against answers kept outside this repo.
+- Guardrails: the agent never pushes to main, never edits files outside `sandbox/`, and caps loop iterations.
+
+## Packages
+- `Anthropic`: official C# SDK, v10+ (not the old tryAGI package)
+- `ModelContextProtocol` (+ `Microsoft.Extensions.Hosting` for the server)
+- xUnit for the sandbox
+
+## API access
+Claude Code runs on my Pro login. The Agent project (Session 4+) calls the Claude API directly and needs a Console API key with credits. The key goes in the `ANTHROPIC_API_KEY` env var, never in the repo.
+
+## Session plan
+| # | Session | API credits? |
+|---|---|---|
+| 1 | Architecture + FlakyLab sandbox | No |
+| 2 | MCP server scaffold + `run_test_n_times` (`dotnet test --filter`, parse .trx), test in MCP Inspector | No |
+| 3 | Code analyzer tools (`read_source`, find the implementation for a test) | No |
+| 4 | Hand-coded agentic loop: Anthropic SDK + MCP client | Yes |
+| 5 | Investigation prompt + first diagnoses, scored against ground truth | Yes |
+| 6 | TeamCity in Docker + `get_flaky_candidates` | No |
+| 7 | Fix → verify 10x → git branch/PR tools | Yes |
+| 8 | Notifier, guardrails, audit log, final scorecard | Light |
+
+Open design question: a test that fails about 10% of the time passes 5 reruns about 59% of the time. `run_test_n_times` should return counts, durations and failure messages so Claude can reason about uncertainty and ask for more runs.
+
+## Session log
+- Session 1 (in claude.ai): architecture agreed; FlakyLabTests.cs written (4 flaky + 1 stable control). Next: wire up the sandbox project, then Session 2.

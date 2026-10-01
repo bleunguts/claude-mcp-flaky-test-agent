@@ -38,4 +38,4 @@ Claude Code runs on my Pro login. The Agent project (Session 4+) calls the Claud
 The session plan, status and open design questions live in [ROADMAP.md](ROADMAP.md), which is the single source of truth. Update its status line and table at the end of each session.
 
 ## Session log
-- Session 1 (in claude.ai): architecture agreed; FlakyLabTests.cs written (4 flaky + 1 stable control). Next: wire up the sandbox project, then Session 2.
+- Session 1 (complete): architecture agreed; FlakyLabTests.cs written (6 tests, including 1 stable control); sandbox switched from xUnit to NUnit; FlakyDetective.slnx created with sandbox/FlakyLab; 10 consecutive runs gave 1 to 4 failures out of 6, so the sandbox is confirmed flaky. Next: Session 2 (MCP server scaffold + `run_test_n_times`).

@@ -10,6 +10,8 @@ if (args.Contains("--try"))
     var folder = TestRunner.FindSlnFolderRecursively(AppContext.BaseDirectory);
     Console.WriteLine($"Found sln folder: {folder}");
     await TestRunner.RunTestsAsync(folder, testFilter: null);
+    var trxResults = TrxParser.ParseResults(Path.Combine(folder, "TestResults", "mcp", "run1.trx"), runNumber: 1);
+    trxResults.ForEach(x => Console.WriteLine($"Test: {x.TestName}, Outcome: {x.Outcome}, Duration: {x.DurationMs}ms, Error: {x.Error}"));
     return;
 }
 

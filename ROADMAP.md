@@ -2,14 +2,14 @@
 
 A step-by-step build of an MCP server and a hand-written agentic loop that investigates flaky tests, proposes and verifies fixes, and raises pull requests. The project doubles as a guided tour of agentic architecture: the tool producer (MCP server), the tool orchestrator (the loop), and the guardrails around them are each built in the open, one small session at a time.
 
-**Status:** Session 1 complete, Session 2 next.
+**Status:** Sessions 1 and 2 complete, Session 3 next.
 
 ## Sessions
 
 | # | Session | API credits? | Status |
 |---|---|---|---|
 | 1 | Architecture + FlakyLab sandbox | No | Done |
-| 2 | MCP server scaffold + `run_test_n_times` tool (`dotnet test --filter`, parse .trx), tested in MCP Inspector | No | Planned |
+| 2 | MCP server scaffold + `run_test_n_times` tool (`dotnet test --filter`, parse .trx), tested in MCP Inspector | No | Done |
 | 3 | Code analyzer tools (`read_source`, plus a way to find the implementation for a test) | No | Planned |
 | 4 | Hand-coded agentic loop: Anthropic C# SDK + MCP client | Yes | Planned |
 | 5 | Investigation prompt + first diagnoses, scored against ground truth | Yes | Planned |
@@ -80,8 +80,16 @@ for i in {1..10}; do dotnet test sandbox/FlakyLab --nologo -v q | tail -1; done
 
 **Done when:** the 10 runs show different pass/fail counts. Confirmed: ten consecutive runs gave between 1 and 4 failures out of 6 tests.
 
-## Session 2 design question
+## Session 2: the `run_test_n_times` tool
 
-One of the flaky tests fails only about 10% of the time. With 5 reruns, the chance that all 5 pass is 0.9⁵ ≈ 59%, so a naive "rerun 5 times" check misses it more often than not.
+`FlakyDetective.McpServer` runs over stdio and logs to stderr only. It exposes two tools: `ping` (a wiring check) and `run_test_n_times(n, testFilter?)`. The second runs `dotnet test` n times in sequence, reads each `.trx` file, and returns a structured result:
 
-What should `run_test_n_times` return so Claude can reason about that uncertainty, rather than just receiving a pass count? Consider per-run outcomes, durations, failure messages, and whether Claude can request more runs.
+- `Runs`: one row per test per run, with outcome, duration in milliseconds and the error message for failures.
+- `TestSummaries`: one entry per test with runs, passed, failed and failure rate.
+- `Requested` and `Completed`, so partial data is visible.
+- `TestFilter`, where null means the whole suite, so the scope of a result is explicit. A test can behave differently alone and in the suite.
+- A batch-level `Error` for tool failures (build problems, a filter that matches nothing), kept separate from failing tests.
+
+The design question was how to let Claude reason about uncertainty. A test that fails about 10% of the time passes 5 reruns about 59% of the time (0.9⁵), and batches of 10 runs vary noticeably: the same test gave 1 failure in one batch and 3 in the next. The result therefore carries run counts and rates, so the caller can decide to ask for more runs.
+
+Known limitation: the tool uses `--no-build`, so the sandbox must be built beforehand (stated in the tool description). A stale build produces results for old code.

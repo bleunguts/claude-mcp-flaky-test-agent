@@ -1,6 +1,7 @@
 ﻿using FlakyDetective.Agent;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
+using System.Text.Json;
 
 Console.WriteLine("Hello, World! from the FlakyDetective.Agent");
 var root = Helpers.FindSlnFolderRecursively(AppContext.BaseDirectory);   
@@ -31,11 +32,11 @@ foreach (var tool in toolDefinitions)
 Console.WriteLine("=====================================================================> tools listed");
 
 // call ping
-PrintToolResult(await client.CallToolAsync("ping"));
+Log.PrintToolResult(await client.CallToolAsync("ping"));
 Console.WriteLine("=====================================================================");
 
 // call find_test_source with arg 
-PrintToolResult(await client.CallToolAsync(
+Log.PrintToolResult(await client.CallToolAsync(
     "find_test_source",
     new Dictionary<string, object>
     {
@@ -43,7 +44,7 @@ PrintToolResult(await client.CallToolAsync(
     }));
 Console.WriteLine("=====================================================================");
 
-PrintToolResult(await client.CallToolAsync("read_source",
+Log.PrintToolResult(await client.CallToolAsync("read_source",
     new Dictionary<string, object?>
     {
         ["path"] = "sandbox/FlakyLab/FlakyLabTests.cs",
@@ -51,7 +52,7 @@ PrintToolResult(await client.CallToolAsync("read_source",
         ["endLine"] = 92,
     }));
 Console.WriteLine("=====================================================================");
-PrintToolResult(await client.CallToolAsync("read_source",
+Log.PrintToolResult(await client.CallToolAsync("read_source",
     new Dictionary<string, object?>
     {
         ["path"] = ".env",
@@ -59,7 +60,7 @@ PrintToolResult(await client.CallToolAsync("read_source",
         ["endLine"] = 92,
     }));
 
-PrintToolResult(await client.CallToolAsync("read_source",
+Log.PrintToolResult(await client.CallToolAsync("read_source",
     new Dictionary<string, object?>
     {
         ["path"] = "",
@@ -67,13 +68,15 @@ PrintToolResult(await client.CallToolAsync("read_source",
         ["endLine"] = 92,
     }));
 
+Console.WriteLine("===================================================================== conversation");
+
 var conversation = new List<Message>
 {
     new Message("user", [new TextBlock("Where is the test Reset_clears_cache?")]),
     new Message("assistant", [new ToolUseBlock("call_1", "find_test_source", new Dictionary<string, object?> { { "testName", "Reset_clears_cache" } })]),
     
     new Message("user", [new ToolResultBlock("call_1", "{\"testName\":\"Reset_clears_cache\",\"matches\":[{\"file\":\"sandbox/FlakyLab/FlakyLabTests.cs\",\"startLine\":83,\"endLine\":89}]}", false)]),
-    new Message("assistant", [new TextBlock("It is in sandbox/FlakyLab/FlakyLabTests.cs, lines 83 to 89.")]),
+    //new Message("assistant", [new TextBlock("It is in sandbox/FlakyLab/FlakyLabTests.cs, lines 83 to 89.")]),
 };
 
 foreach (var message in conversation)
@@ -89,4 +92,55 @@ var modelResponse1 = Script.CallTool("call_1", "ping", []);
 Log.PrintModelResponse(modelResponse1);
 var modelResponse2 = Script.CallTool("call_2", "find_test_source", new Dictionary<string, object?> { { "testName", "Reset_clears_cache" } });
 Log.PrintModelResponse(modelResponse2);
+
+Console.WriteLine("===================================================================== using ScriptedModel");
+
+var script = new ScriptedModel([
+    messages =>
+    {
+        Console.WriteLine("Step 1: Call ping");
+        return Script.CallTool("call_1", "ping", []);
+    },
+    messages =>
+    {
+        Console.WriteLine("Step 2: Call find_test_source");
+        return Script.CallTool("call_2", "find_test_source", new Dictionary<string, object?> { { "testName", "Reset_clears_cache" } });
+    },
+    messages =>
+    {        
+        Console.WriteLine("Step 3: Read");
+        var lastMessage = messages.Last();   
+        var answer = lastMessage.Content.OfType<ToolResultBlock>().First();
+        var json = JsonDocument.Parse(answer.Content).RootElement;
+        var match = json.GetProperty("matches")[0];
+        var filePath = match.GetProperty("file").GetString();
+        var startLine = match.GetProperty("startLine").GetInt32();
+        var endLine = match.GetProperty("endLine").GetInt32();
+        return Script.CallTool("call_3", "read_source", new Dictionary<string, object?> 
+        { 
+            { "path", filePath }, 
+            { "startLine", startLine }, 
+            { "endLine", endLine } 
+        });
+    },
+    messages =>
+    {
+        Console.WriteLine("Step 4: Finish");
+        return Script.Finish("Done!");
+    }
+]);
+
+for(int i = 0; i < 4; i++)
+{
+    try
+    {
+        var response = await script.CompleteAsync(conversation, toolDefinitions);
+        Console.WriteLine($"Script completed with stop reason: {response.StopReason}");
+        Log.PrintModelResponse(response);
+    }
+    catch (InvalidOperationException ex)
+    {
+        Console.WriteLine($"Script failed with exception: {ex.Message}");
+    }
+}
 

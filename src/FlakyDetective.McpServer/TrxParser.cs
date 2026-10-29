@@ -8,6 +8,11 @@ public class TrxParser
 
     public static List<RunResult> ParseResults(string trxPath, int runNumber)
     {
+        if (!File.Exists(trxPath))
+        {
+            throw new FileNotFoundException($"TRX file not found: {trxPath}");
+        }
+
         var results = new List<RunResult>();        
         XDocument.Load(trxPath)
             .Descendants(XName.Get("UnitTestResult", xmlns))

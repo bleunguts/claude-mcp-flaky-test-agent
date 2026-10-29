@@ -7,11 +7,13 @@ Console.WriteLine("Hello, World from FlakyDetective.McpServer!");
 
 if (args.Contains("--try"))
 {
-    var folder = TestRunner.FindSlnFolderRecursively(AppContext.BaseDirectory);
-    Console.WriteLine($"Found sln folder: {folder}");
-    await TestRunner.RunTestsAsync(folder, testFilter: null);
-    var trxResults = TrxParser.ParseResults(Path.Combine(folder, "TestResults", "mcp", "run1.trx"), runNumber: 1);
-    trxResults.ForEach(x => Console.WriteLine($"Test: {x.TestName}, Outcome: {x.Outcome}, Duration: {x.DurationMs}ms, Error: {x.Error}"));
+    var results = await TestRunner.RunBatch(5); 
+    
+    Console.WriteLine($"Requested: {results.Requested}, Completed: {results.Completed}, Error: {results.Error}");
+    results.TestSummaries.ForEach(summary =>
+    {
+        Console.WriteLine($"Test: {summary.TestName}, Runs: {summary.Runs}, Passed: {summary.Passed}, Failed: {summary.Failed}, FailureRate: {summary.FailureRate}");
+    });        
     return;
 }
 

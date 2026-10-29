@@ -45,11 +45,7 @@ public class TestRunner
         {     
             var processResult = await RunTestsAsync(workingFolder, trxFolder, runNumber, testFilter);
             processResults.Add(processResult);
-            string trxFilePath = Path.Combine(trxFolder, ToTrxFilename(runNumber));
-            if (!File.Exists(trxFilePath))
-            {
-                continue;   
-            }
+            string trxFilePath = Path.Combine(trxFolder, ToTrxFilename(runNumber));            
             var trxResults = TrxParser.ParseResults(trxFilePath, runNumber);
             runsCompleted++;
             allTrxResults.AddRange(trxResults);
@@ -57,31 +53,44 @@ public class TestRunner
 
         if (!allTrxResults.Any())
         {
-            string? stderr = processResults.FirstOrDefault()?.Stderr;
-            if (!string.IsNullOrEmpty(stderr))
+            var failedRuns = processResults.FirstOrDefault(r => r.PathToTrxFile == null); 
+            
+            if(failedRuns != null)
             {
+                var reason = failedRuns.Stderr != null ? failedRuns.Stderr : failedRuns.stdout;
                 return new BatchRunResult
                 (
                     Requested: n,
                     Completed: runsCompleted,
-                    Error: $"The runner failed to run, no TRX results were found , Reason: {stderr}",
+                    Error: $"dotnet test produced no trx file exitCode:{failedRuns.ExitCode} , Reason: {reason}",
                     TestFilter: testFilter,
                     Runs: allTrxResults,
                     TestSummaries: new List<TestSummary>()
                 );
             }
-
-            if(testFilter != null && testFilter != string.Empty)
+            else if (!string.IsNullOrEmpty(testFilter))
             {
                 return new BatchRunResult
                 (
                     Requested: n,
                     Completed: runsCompleted,
-                    Error: $"No TRX results were found, the test filter '{testFilter}' did not result in any matching tests",
+                    Error: $"The test filter '{testFilter}' did not result in any matching tests",
                     TestFilter: testFilter,
                     Runs: allTrxResults,
                     TestSummaries: new List<TestSummary>()
                 );
+            }
+            else
+            {
+                return new BatchRunResult
+               (
+                   Requested: n,
+                   Completed: runsCompleted,
+                   Error: $"dotnet test ran but produced no results",
+                   TestFilter: testFilter,
+                   Runs: allTrxResults,
+                   TestSummaries: new List<TestSummary>()
+               );
             }
         }
 

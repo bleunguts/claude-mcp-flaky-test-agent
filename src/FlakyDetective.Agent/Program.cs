@@ -81,25 +81,12 @@ foreach (var message in conversation)
     Console.WriteLine($"Role: {message.Role}, Kinds: {string.Join(", ", message.Content.Select(b => b.GetType().Name))}");
     foreach (var block in message.Content)
     {
-        switch (block)
-        {
-            case TextBlock textBlock:
-                Console.WriteLine($"Text: {textBlock.Text}");
-                break;
-            case ToolUseBlock toolUseBlock:
-                Console.WriteLine($"Tool Use: {toolUseBlock.Name}, Id: {toolUseBlock.Id}, Input: {string.Join(", ", toolUseBlock.Input.Select(kv => $"{kv.Key}={kv.Value}"))}");
-                break;
-            case ToolResultBlock toolResultBlock:
-                Console.WriteLine($"Tool Result: {toolResultBlock.ToolUseId}, Content: {toolResultBlock.Content}, IsError: {toolResultBlock.IsError}");
-                break;
-        }
+        Log.Print(block);
     }
 }
 
-static void PrintToolResult(CallToolResult result2)
-{
-    foreach (var block in result2.Content.OfType<TextContentBlock>())
-    {
-        Console.WriteLine($"Tool Result: {block.Text}. Type:{block.Type}");
-    }
-}
+var modelResponse1 = Script.CallTool("call_1", "ping", []);
+Log.PrintModelResponse(modelResponse1);
+var modelResponse2 = Script.CallTool("call_2", "find_test_source", new Dictionary<string, object?> { { "testName", "Reset_clears_cache" } });
+Log.PrintModelResponse(modelResponse2);
+

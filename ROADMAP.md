@@ -2,7 +2,7 @@
 
 A step-by-step build of an MCP server and a hand-written agentic loop that investigates flaky tests, proposes and verifies fixes, and raises pull requests. The project doubles as a guided tour of agentic architecture: the tool producer (MCP server), the tool orchestrator (the loop), and the guardrails around them are each built in the open, one small session at a time.
 
-**Status:** Sessions 1 and 2 complete, Session 3 next.
+**Status:** Sessions 1 to 3 complete, Session 4 next.
 
 ## Sessions
 
@@ -10,7 +10,7 @@ A step-by-step build of an MCP server and a hand-written agentic loop that inves
 |---|---|---|---|
 | 1 | Architecture + FlakyLab sandbox | No | Done |
 | 2 | MCP server scaffold + `run_test_n_times` tool (`dotnet test --filter`, parse .trx), tested in MCP Inspector | No | Done |
-| 3 | Code analyzer tools (`read_source`, plus a way to find the implementation for a test) | No | Planned |
+| 3 | Code analyzer tools (`read_source`, `find_test_source`) | No | Done |
 | 4 | Hand-coded agentic loop: Anthropic C# SDK + MCP client | Yes | Planned |
 | 5 | Investigation prompt + first diagnoses, scored against ground truth | Yes | Planned |
 | 6 | TeamCity in Docker + `get_flaky_candidates` tool | No | Planned |
@@ -34,7 +34,7 @@ Sessions are small and cover one topic each. Every change follows the same path:
 │                         ▼                                                  │
 │  src/FlakyDetective.McpServer  (tool PRODUCER)                             │
 │   [McpServerTool] get_flaky_candidates · run_test_n_times ·                │
-│   read_source · git_branch_commit_pr · notify                              │
+│   read_source · find_test_source · git_branch_commit_pr · notify           │
 │        │                 │                                                 │
 │        ▼                 ▼                                                 │
 │   TeamCity REST     sandbox/FlakyLab (deliberately flaky NUnit tests)      │
@@ -93,3 +93,23 @@ for i in {1..10}; do dotnet test sandbox/FlakyLab --nologo -v q | tail -1; done
 The design question was how to let Claude reason about uncertainty. A test that fails about 10% of the time passes 5 reruns about 59% of the time (0.9⁵), and batches of 10 runs vary noticeably: the same test gave 1 failure in one batch and 3 in the next. The result therefore carries run counts and rates, so the caller can decide to ask for more runs.
 
 Known limitation: the tool uses `--no-build`, so the sandbox must be built beforehand (stated in the tool description). A stale build produces results for old code.
+
+## Session 3: reading the code
+
+Two read-only tools let Claude look at the code behind a flaky test. A tool is a permission boundary: Claude can only read what the server chooses to expose, so the boundary is enforced in the server, not left to the caller.
+
+- `read_source(path, startLine?, endLine?)` returns a file's lines prefixed with line numbers, plus the range returned, the total line count and a `Truncated` flag. At most 300 lines come back per call; when `Truncated` is true, the caller asks again from `EndLine + 1`.
+- `find_test_source(testName)` finds a test method by exact name and returns the file and the 1-based first and last line, attributes included, ready to pass to `read_source`. Several matches are all returned; no match is an error.
+- Failures in both tools come back as a normal result with an `Error` field, the same shape as a success, never as an exception.
+
+The boundary (`PathGuard`):
+
+- The root is the folder containing `FlakyDetective.slnx`, computed by the server. Paths are relative to it and no tool takes a root parameter.
+- Paths are fully resolved before they are checked, so `..` segments, absolute paths, mixed separators and sibling folders with a matching prefix are all refused.
+- Denied at any depth: `.git`, `.claude`, `bin`, `obj`, `TestResults`, files starting with `.env` or `GROUND_TRUTH`.
+- Only text and source extensions are readable.
+
+Known limitations:
+
+- Symbolic links inside the solution are not resolved, so a link pointing outside the root would pass the check.
+- `find_test_source` uses text matching, not a parser. It finds methods declared as `void` or `Task`, and counts braces inside strings and comments. Roslyn would remove these limits.

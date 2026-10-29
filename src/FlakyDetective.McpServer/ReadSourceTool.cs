@@ -61,7 +61,7 @@ public class ReadSourceTool
         return new ReadSourceResult(relativePath, content, start, end, totalLines, truncated, null);
     }
 
-    private static ReadSourceResult Fail(string path, string error)
+    private static ReadSourceResult Fail(string path, string? error)
     {
         return new ReadSourceResult(
             path,

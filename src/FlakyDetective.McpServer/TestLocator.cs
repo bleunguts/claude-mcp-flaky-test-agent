@@ -35,7 +35,31 @@ public class TestLocator
                     {
                         if (rex.IsMatch(lines[i]))
                         {
-                            matches.Add(new TestLocation(File: relativePath, StartLine: i + 1, EndLine: i + 1));
+                            int start = i;
+                            while (start > 0 && lines[start - 1].TrimStart().StartsWith("["))
+                                start--;
+
+                            int end = 0;
+                            int depth = 0;
+                            bool started = false;
+                            for (int line = i; line < lines.Length; line++)
+                            {
+                                var text = lines[line];
+                                // for the expression-bodied case: if (!started && text.Contains("=>")) → end at the line with the next ';'
+                                foreach (char c in text)
+                                {
+                                    if (c == '{') { depth++; started = true; }
+                                    else if (c == '}') { depth--; }
+                                }
+                                if (started && depth == 0)
+                                {
+                                    end = line + 1;   // 1-based EndLine
+                                    break;
+                                }                                    
+                            }
+                            // ran off the end of the file without balancing: decide what to return (the declaration line, or an Error)
+
+                            matches.Add(new TestLocation(File: relativePath, StartLine: start, EndLine: end));
                         }
                     }
                 }                             

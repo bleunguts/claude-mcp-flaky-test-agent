@@ -7,7 +7,7 @@ Console.WriteLine("Hello, World from FlakyDetective.McpServer!");
 
 if (args.Contains("--try"))
 {
-    var results = await TestRunner.RunBatch(5); 
+    var results = await TestRunner.RunBatch(5, null); 
     
     Console.WriteLine($"Requested: {results.Requested}, Completed: {results.Completed}, Error: {results.Error}");
     results.TestSummaries.ForEach(summary =>

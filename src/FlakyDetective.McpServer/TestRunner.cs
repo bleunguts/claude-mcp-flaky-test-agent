@@ -27,8 +27,9 @@ public class TestRunner
         return FindSlnFolderRecursively(currentFolder.FullName);
     }
 
-    public static async Task<BatchRunResult> RunBatch(int n, string? testFilter = null)
+    public static async Task<BatchRunResult> RunBatch(int n, string? testFilter)
     {
+        testFilter = string.IsNullOrWhiteSpace(testFilter) ? null : testFilter.Trim();
         string workingFolder = FindSlnFolderRecursively(AppContext.BaseDirectory);
         string trxFolder = Path.Combine(workingFolder, "TestResults", "mcp");
         

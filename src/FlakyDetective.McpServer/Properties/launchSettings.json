@@ -1,8 +1,7 @@
 {
   "profiles": {
     "FlakyDetective.McpServer": {
-      "commandName": "Project",
-      "commandLineArgs": "--try"
+      "commandName": "Project"
     }
   }
 }

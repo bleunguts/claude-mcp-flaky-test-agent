@@ -68,6 +68,7 @@ Log.PrintToolResult(await client.CallToolAsync("read_source",
         ["endLine"] = 92,
     }));
 
+/*
 Console.WriteLine("===================================================================== conversation");
 
 var conversation = new List<Message>
@@ -95,41 +96,7 @@ Log.PrintModelResponse(modelResponse2);
 
 Console.WriteLine("===================================================================== using ScriptedModel");
 
-var script = new ScriptedModel([
-    messages =>
-    {
-        Console.WriteLine("Step 1: Call ping");
-        return Script.CallTool("call_1", "ping", []);
-    },
-    messages =>
-    {
-        Console.WriteLine("Step 2: Call find_test_source");
-        return Script.CallTool("call_2", "find_test_source", new Dictionary<string, object?> { { "testName", "Reset_clears_cache" } });
-    },
-    messages =>
-    {        
-        Console.WriteLine("Step 3: Read");
-        var lastMessage = messages.Last();   
-        var answer = lastMessage.Content.OfType<ToolResultBlock>().First();
-        var json = JsonDocument.Parse(answer.Content).RootElement;
-        var match = json.GetProperty("matches")[0];
-        var filePath = match.GetProperty("file").GetString();
-        var startLine = match.GetProperty("startLine").GetInt32();
-        var endLine = match.GetProperty("endLine").GetInt32();
-        return Script.CallTool("call_3", "read_source", new Dictionary<string, object?> 
-        { 
-            { "path", filePath }, 
-            { "startLine", startLine }, 
-            { "endLine", endLine } 
-        });
-    },
-    messages =>
-    {
-        Console.WriteLine("Step 4: Finish");
-        return Script.Finish("Done!");
-    }
-]);
-
+var script = CreateDemoScript();    
 for(int i = 0; i < 4; i++)
 {
     try
@@ -143,8 +110,43 @@ for(int i = 0; i < 4; i++)
         Console.WriteLine($"Script failed with exception: {ex.Message}");
     }
 }
+*/
 
 Console.WriteLine("===================================================================== using Agent Loop");
 string prompt = "Find and read the Reset_clears_cache test";
-var result = await ScriptedModel.RunLoopAsync(script, client, toolDefinitions, prompt, 10);
-Console.WriteLine($"Final result: {result}");   
+var result = await AgentLoop.RunLoopAsync(CreateDemoScript(), client, toolDefinitions, prompt, 10);
+Console.WriteLine($"Final result: {result}");
+static ScriptedModel CreateDemoScript() => new ScriptedModel([
+    messages =>
+    {
+        Console.WriteLine("Step 1: Call ping");
+        return Script.CallTool("call_1", "ping", []);
+    },
+    messages =>
+    {
+        Console.WriteLine("Step 2: Call find_test_source");
+        return Script.CallTool("call_2", "find_test_source", new Dictionary<string, object?> { { "testName", "Reset_clears_cache" } });
+    },
+    messages =>
+    {
+        Console.WriteLine("Step 3: Read");
+        var lastMessage = messages.Last();
+        var answer = lastMessage.Content.OfType<ToolResultBlock>().First();
+        var json = JsonDocument.Parse(answer.Content).RootElement;
+        var match = json.GetProperty("matches")[0];
+        var filePath = match.GetProperty("file").GetString();
+        var startLine = match.GetProperty("startLine").GetInt32();
+        var endLine = match.GetProperty("endLine").GetInt32();
+        return Script.CallTool("call_3", "read_source", new Dictionary<string, object?>
+        {
+            { "path", filePath },
+            { "startLine", startLine },
+            { "endLine", endLine }
+        });
+    },
+    messages =>
+    {
+        Console.WriteLine("Step 4: Finish");
+        return Script.Finish("Done!");
+    }
+]);

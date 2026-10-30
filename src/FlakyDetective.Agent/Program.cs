@@ -254,9 +254,9 @@ var liveHttp = new HttpClient { BaseAddress = new Uri("http://localhost:11434"),
 var liveModel = new OllamaModel(liveHttp, "qwen2.5:3b", 8192);
 
 // string livePrompt = "Use the ping tool and tell me what it returned.";
-string livePrompt = "Find and read the Reset_clears_cache test";
+string livePrompt = "Investigate the test Mid_is_positive.";
 
-var liveResult = await AgentLoop.RunLoopAsync(liveModel, client, toolDefinitions, livePrompt, 8, null);
+var liveResult = await AgentLoop.RunLoopAsync(liveModel, client, toolDefinitions, livePrompt, 8, Prompts.InvestigateV1);
 Console.WriteLine($"Final result: {liveResult}");
 #endregion
 

@@ -10,8 +10,12 @@ namespace FlakyDetective.McpServer;
 public class RunTestsTool
 {
     [McpServerTool(Name = "run_test_n_times")]
-    [Description("Run a batch of dotnet tests and produce a summary result focusing on failure rates. Prerequisite: build the sandbox first. testFilter is an optional parameter to match partially fully qualified name. n is the number of times to run the tests.")]
-    public static async Task<BatchRunResult> RunTests(int n, string? testFilter = null)
+    [Description("Runs the sandbox tests n times, one run after another, and reports how often each test failed. " +
+        "Build the sandbox first. Leave testFilter empty to run the whole suite, " +
+        "or set it to one test name to run only that test.")]
+    public static async Task<BatchRunResult> RunTests(
+          [Description("How many times to run the tests, from 1 to 100. Use 10 unless told otherwise.")] int n,
+           [Description("Optional. Just the test method name, for example Reset_clears_cache. Do not add a namespace or class. Leave empty to run the whole suite.")] string? testFilter = null)
     {
         if (n <= 0 || n > 100)
         {

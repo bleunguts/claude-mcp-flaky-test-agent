@@ -260,4 +260,29 @@ var liveResult = await AgentLoop.RunLoopAsync(liveModel, client, toolDefinitions
 Console.WriteLine($"Final result: {liveResult}");
 #endregion
 
+#region 8. The live run with Claude through the Anthropic API (issue #27)
+// WHAT:     The same loop as region 7 with AnthropicModel behind IModel instead of OllamaModel.
+//           Nothing else changes, which is the point of the IModel interface.
+// RUN IT:   Remove the /* */, and comment out region 7 if you do not want both to run.
+//           Needs ANTHROPIC_API_KEY set to a key with credits (the SDK reads it; never commit it).
+// WITHOUT CREDITS: the request is still built and sent. The API refuses it and AnthropicModel throws
+//           a readable error: 401 for a missing or invalid key, 400 for a request the API rejects
+//           (a missing credit balance is reported this way). The program ends with that message.
+// LESSON:   Claude's reasoning comes back as thinking blocks, which must be sent back unchanged on
+//           the next turn, so AgentLoop keeps the whole reply in the history. The default model is
+//           claude-opus-5-5; the second constructor argument picks another, such as the far
+//           cheaper claude-haiku-5-5.
+// OUTPUT:   The same iteration log as region 7, plus "Thinking: ..." lines.
+/*
+Console.WriteLine("===================================================================== using Agent Loop with Claude");
+var claudeModel = new AnthropicModel(new Anthropic.AnthropicClient());
+// var claudeModel = new AnthropicModel(new Anthropic.AnthropicClient(), "claude-haiku-5-5");
+
+string claudePrompt = "Find and read the Reset_clears_cache test";
+
+var claudeResult = await AgentLoop.RunLoopAsync(claudeModel, client, toolDefinitions, claudePrompt, 8);
+Console.WriteLine($"Final result: {claudeResult}");
+*/
+#endregion
+
 

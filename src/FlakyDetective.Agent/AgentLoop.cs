@@ -13,7 +13,8 @@ public class AgentLoop
         McpClient client,
         IReadOnlyList<ToolDefinition> tools,
         string userPrompt,
-        int maxIterations)
+        int maxIterations,
+        string? systemPrompt = null)
     {
         var messages = new List<Message>
         {
@@ -27,7 +28,7 @@ public class AgentLoop
         for (var iteration = 1; iteration <= maxIterations; iteration++)
         {
             Log.Iteration(iteration, maxIterations);
-            var response = await model.CompleteAsync(messages, tools);
+            var response = await model.CompleteAsync(messages, tools, systemPrompt);
             messages.Add(new Message
             (
                 Role: "assistant",

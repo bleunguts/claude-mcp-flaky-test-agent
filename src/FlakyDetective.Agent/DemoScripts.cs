@@ -116,7 +116,7 @@ public class RunawayModel : IModel
 {
     private int _calls;
 
-    public Task<ModelResponse> CompleteAsync(List<Message> messages, IReadOnlyList<ToolDefinition> tools, CancellationToken cancellationToken = default)
+    public Task<ModelResponse> CompleteAsync(List<Message> messages, IReadOnlyList<ToolDefinition> tools, string? systemPrompt = null, CancellationToken cancellationToken = default)
     {
         _calls++;
         Console.WriteLine($"RunawayModel: asking for ping again (call {_calls})");

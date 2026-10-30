@@ -256,7 +256,7 @@ var liveModel = new OllamaModel(liveHttp, "qwen2.5:3b", 8192);
 // string livePrompt = "Use the ping tool and tell me what it returned.";
 string livePrompt = "Find and read the Reset_clears_cache test";
 
-var liveResult = await AgentLoop.RunLoopAsync(liveModel, client, toolDefinitions, livePrompt, 8);
+var liveResult = await AgentLoop.RunLoopAsync(liveModel, client, toolDefinitions, livePrompt, 8, null);
 Console.WriteLine($"Final result: {liveResult}");
 #endregion
 

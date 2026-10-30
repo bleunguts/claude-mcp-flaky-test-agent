@@ -25,6 +25,7 @@ public class AgentLoop
             )
         };
 
+        var toolsCalled = new List<string>();
         for (var iteration = 1; iteration <= maxIterations; iteration++)
         {
             Log.Iteration(iteration, maxIterations);
@@ -62,12 +63,14 @@ public class AgentLoop
                     }
                     var toolResult = new ToolResultBlock(toolUse.Id, append.ToString(), toolResponse.IsError == true);
                     Log.PrintToolResult(toolResult);
-                    toolResults.Add(toolResult);                    
+                    toolResults.Add(toolResult);
+                    toolsCalled.Add(Describe(toolUse, toolResult.IsError));
                 }
                 catch (Exception exp)
                 {
                     ToolResultBlock toolResult = new(toolUse.Id, $"Tool call failed. {exp.Message}", true);
                     toolResults.Add(toolResult);
+                    toolsCalled.Add(Describe(toolUse, toolResult.IsError));
                     Log.PrintToolResult(toolResult);
                 }
             }
@@ -75,5 +78,10 @@ public class AgentLoop
         }
         Log.LoopStopped(LoopStopReason.MaxIterationsReached, maxIterations);
         return new AgentResult($"Maximum iterations reached without a successful completion. {userPrompt}", true, maxIterations);
+    }
+
+    private static string Describe(ToolUseBlock toolUse, bool isError)
+    {
+        throw new NotImplementedException();
     }
 }

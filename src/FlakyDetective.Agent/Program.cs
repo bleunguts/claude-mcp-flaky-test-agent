@@ -256,7 +256,7 @@ var liveModel = new OllamaModel(liveHttp, "qwen2.5:3b", 8192);
 // string livePrompt = "Use the ping tool and tell me what it returned.";
 string livePrompt = "Investigate the test Mid_is_positive.";
 
-var liveResult = await AgentLoop.RunLoopAsync(liveModel, client, toolDefinitions, livePrompt, 8, Prompts.InvestigateV1);
+var liveResult = await AgentLoop.RunLoopAsync(liveModel, client, toolDefinitions, livePrompt, 12, Prompts.InvestigateV1);
 Console.WriteLine($"Final result: {liveResult}");
 #endregion
 
@@ -280,7 +280,7 @@ var claudeModel = new AnthropicModel(new Anthropic.AnthropicClient());
 
 string claudePrompt = "Find and read the Reset_clears_cache test";
 
-var claudeResult = await AgentLoop.RunLoopAsync(claudeModel, client, toolDefinitions, claudePrompt, 8);
+var claudeResult = await AgentLoop.RunLoopAsync(claudeModel, client, toolDefinitions, claudePrompt, 12, Prompts.InvestigateV1);
 Console.WriteLine($"Final result: {claudeResult}");
 */
 #endregion

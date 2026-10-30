@@ -241,31 +241,48 @@ foreach (var call in toolReply!.Message.ToolCalls ?? [])
 */
 #endregion
 
-#region 7. The live run: the agent loop with the model chosen on the command line (issues #22, #27)
-// WHAT:     Runs the agent loop against the model picked by ModelSelection and lets it decide
-//           which tools to call for the prompt below.
-// CHOOSE:   dotnet run --project src/FlakyDetective.Agent -- --model scripted|ollama|anthropic
-//           Default is ollama. OLLAMA_MODEL (default qwen2.5:3b) and ANTHROPIC_MODEL (default
-//           claude-opus-5-5) pick the model name.
-// PREREQ:   ollama:    Ollama running, model pulled (`ollama pull qwen2.5:3b`).
-//           anthropic: ANTHROPIC_API_KEY set, with credits. Without credits the API refuses the
-//                      request and AnthropicModel reports it as an error, which is still a good test
-//                      that the request was built and sent.
-//           Always:    solution built.
+#region 7. The live run: the agent loop with a real local model (issue #22)
+// WHAT:     The current default. Runs the agent loop against a local Ollama model and lets it
+//           decide which tools to call for the prompt below.
+// PREREQ:   Ollama running, model pulled (`ollama pull qwen2.5:3b`), solution built.
 // SWITCH:   Change `livePrompt` to try the other demo: "Use the ping tool and tell me what it returned."
 // LESSON:   With qwen2.5:3b the model chained find_test_source then read_source on its own, which
-//           is the whole point of the loop. Small models also pad their answers. The loop is the
-//           same for every model: only the IModel behind it changes.
+//           is the whole point of the loop. Small models also pad their answers.
 // OUTPUT:   Iteration log, then "Stopped: end_turn after 3 iterations" and the final AgentResult.
 Console.WriteLine("===================================================================== using Agent Loop");
-var liveModel = ModelSelection.Create(args);
-Console.WriteLine($"Model: {liveModel.GetType().Name}");
+var liveHttp = new HttpClient { BaseAddress = new Uri("http://localhost:11434"), Timeout = TimeSpan.FromMinutes(5) };
+var liveModel = new OllamaModel(liveHttp, "qwen2.5:3b", 8192);
 
 // string livePrompt = "Use the ping tool and tell me what it returned.";
 string livePrompt = "Find and read the Reset_clears_cache test";
 
 var liveResult = await AgentLoop.RunLoopAsync(liveModel, client, toolDefinitions, livePrompt, 8);
 Console.WriteLine($"Final result: {liveResult}");
+#endregion
+
+#region 8. The live run with Claude through the Anthropic API (issue #27)
+// WHAT:     The same loop as region 7 with AnthropicModel behind IModel instead of OllamaModel.
+//           Nothing else changes, which is the point of the IModel interface.
+// RUN IT:   Remove the /* */, and comment out region 7 if you do not want both to run.
+//           Needs ANTHROPIC_API_KEY set to a key with credits (the SDK reads it; never commit it).
+// WITHOUT CREDITS: the request is still built and sent. The API refuses it and AnthropicModel throws
+//           a readable error: 401 for a missing or invalid key, 400 for a request the API rejects
+//           (a missing credit balance is reported this way). The program ends with that message.
+// LESSON:   Claude's reasoning comes back as thinking blocks, which must be sent back unchanged on
+//           the next turn, so AgentLoop keeps the whole reply in the history. The default model is
+//           claude-opus-5-5; the second constructor argument picks another, such as the far
+//           cheaper claude-haiku-5-5.
+// OUTPUT:   The same iteration log as region 7, plus "Thinking: ..." lines.
+/*
+Console.WriteLine("===================================================================== using Agent Loop with Claude");
+var claudeModel = new AnthropicModel(new Anthropic.AnthropicClient());
+// var claudeModel = new AnthropicModel(new Anthropic.AnthropicClient(), "claude-haiku-5-5");
+
+string claudePrompt = "Find and read the Reset_clears_cache test";
+
+var claudeResult = await AgentLoop.RunLoopAsync(claudeModel, client, toolDefinitions, claudePrompt, 8);
+Console.WriteLine($"Final result: {claudeResult}");
+*/
 #endregion
 
 

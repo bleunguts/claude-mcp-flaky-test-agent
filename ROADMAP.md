@@ -159,10 +159,10 @@ Usage:
 
 ```bash
 ollama pull qwen2.5:3b
-dotnet run --project src/FlakyDetective.Agent -- --model ollama
+dotnet run --project src/FlakyDetective.Agent
 ```
 
-`ollama` is the default model. The model name comes from the `OLLAMA_MODEL` environment variable and defaults to `qwen2.5:3b`. See "Choosing the model" below for the other options.
+Region 7 of `Program.cs` is the live run with `OllamaModel`; the model name (`qwen2.5:3b`) is set there. Each model has its own region and the loop is identical, so trying another model means uncommenting its region (see the Anthropic section below).
 
 Verified: with `qwen2.5:3b` on a CPU-only laptop, the model called `ping` and answered, and for "find and read the Reset_clears_cache test" it chained `find_test_source` then `read_source` on its own and returned the code in 3 iterations.
 
@@ -185,7 +185,8 @@ It translates in both directions, like the Ollama adapter:
 
 Things worth knowing:
 
-- The default model is `claude-opus-5-5`; set `ANTHROPIC_MODEL` to change it (for example `claude-haiku-5-5` for a far cheaper run). Thinking is always on for this model, so replies contain thinking blocks. The API requires them, with their signatures, to be sent back unchanged on the next turn, so the loop's content types gained `ThinkingBlock` and `RedactedThinkingBlock`. The Ollama adapter ignores them.
+- Region 8 of `Program.cs` is the live run with `AnthropicModel`, commented out by default because it needs credits. Uncomment it (and comment out region 7 if you do not want both) with `ANTHROPIC_API_KEY` set.
+- The default model is `claude-opus-5-5`; pass another model name as the second constructor argument to change it (for example `claude-haiku-5-5` for a far cheaper run). Thinking is always on for this model, so replies contain thinking blocks. The API requires them, with their signatures, to be sent back unchanged on the next turn, so the loop's content types gained `ThinkingBlock` and `RedactedThinkingBlock`. The Ollama adapter ignores them.
 - The API rejects empty text blocks, so the adapter drops them when sending history.
 - `MessageParam` is a union type in this SDK version (user, assistant, system), not a class with a `Role` property.
 
@@ -196,15 +197,3 @@ Known limitations:
 - Not run against the real API, so anything the API validates beyond the shape (model access, token limits) is untested.
 - Server-side refusal `fallbacks` (recommended for this model) are not used; they need the beta endpoint and a second set of types.
 - Responses are not streamed and prompt caching is not used.
-
-## Choosing the model
-
-`ModelSelection` picks the `IModel` for the live run in `Program.cs`, so `AgentLoop` never changes:
-
-```bash
-dotnet run --project src/FlakyDetective.Agent -- --model scripted     # canned demo script, no LLM
-dotnet run --project src/FlakyDetective.Agent -- --model ollama       # default; local model
-dotnet run --project src/FlakyDetective.Agent -- --model anthropic    # Claude API, needs ANTHROPIC_API_KEY with credits
-```
-
-`--scripted`, `--ollama` and `--anthropic` are shortcuts. `OLLAMA_MODEL` (default `qwen2.5:3b`) and `ANTHROPIC_MODEL` (default `claude-opus-5-5`) choose the model name.

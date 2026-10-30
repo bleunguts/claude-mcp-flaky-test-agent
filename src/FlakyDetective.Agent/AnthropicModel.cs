@@ -16,8 +16,8 @@ namespace FlakyDetective.Agent;
 public class AnthropicModel : IModel
 {
     // Claude Opus 5.5. Thinking is always on for this model, so thinking blocks come back in
-    // replies and must be sent back unchanged. Override with ANTHROPIC_MODEL, for example
-    // "claude-haiku-5-5" for a much cheaper run.
+    // replies and must be sent back unchanged. Pass another model name to the constructor, for
+    // example "claude-haiku-5-5" for a much cheaper run.
     public const string DefaultModel = "claude-opus-5-5";
 
     private readonly AnthropicClient _client;

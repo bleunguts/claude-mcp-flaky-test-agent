@@ -139,7 +139,7 @@ Known limitations:
 
 - Tool errors for rejected arguments are generic ("An error occurred invoking 'read_source'"), so a real model has little to go on.
 - The stub never produces a `tool_use` reply without tool blocks; a real model could.
-- A real model adapter was added afterwards (see "Ollama model adapter"); a Claude API adapter is not written.
+- Real model adapters were added afterwards (see "Ollama model adapter" and "Anthropic API adapter").
 
 ## Ollama model adapter
 
@@ -159,10 +159,10 @@ Usage:
 
 ```bash
 ollama pull qwen2.5:3b
-dotnet run --project src/FlakyDetective.Agent -- --ollama
+dotnet run --project src/FlakyDetective.Agent -- --model ollama
 ```
 
-The model name comes from the `OLLAMA_MODEL` environment variable and defaults to `qwen2.5:3b`. Without `--ollama` the scripted model is used.
+`ollama` is the default model. The model name comes from the `OLLAMA_MODEL` environment variable and defaults to `qwen2.5:3b`. See "Choosing the model" below for the other options.
 
 Verified: with `qwen2.5:3b` on a CPU-only laptop, the model called `ping` and answered, and for "find and read the Reset_clears_cache test" it chained `find_test_source` then `read_source` on its own and returned the code in 3 iterations.
 
@@ -171,3 +171,40 @@ Known limitations:
 - Errors (Ollama not running, model not pulled, timeout) end the program with a message; the loop does not recover.
 - Small models pad answers and can call tools badly; the investigation prompt in Session 5 has to account for that.
 - Responses are not streamed.
+
+## Anthropic API adapter
+
+`AnthropicModel` implements `IModel` with the official `Anthropic` C# SDK, so the same `AgentLoop` can run against Claude through `client.Messages.Create`. It is what a real deployment would use. It needs an API key with credits (`ANTHROPIC_API_KEY`, read by the SDK and never committed), which this project does not currently have, so it has not been run against the real API.
+
+It translates in both directions, like the Ollama adapter:
+
+- Our history becomes `MessageParam`s: text, thinking, tool_use and tool_result blocks map to their SDK `*Param` counterparts; user and assistant turns are separate SDK types.
+- Our `ToolDefinition` (a whole JSON schema) becomes the SDK's `Tool` with its `properties` and `required` parts. Other schema keywords such as `additionalProperties` are not forwarded.
+- The reply becomes a `ModelResponse`. As with Ollama, the stop reason is decided by whether the reply contains tool calls. A `refusal` stop reason becomes a plain explanatory message.
+- Errors become readable `InvalidOperationException`s: 401 (bad or missing key), 400 (which is how a missing credit balance is reported) and other API errors.
+
+Things worth knowing:
+
+- The default model is `claude-opus-5-5`; set `ANTHROPIC_MODEL` to change it (for example `claude-haiku-5-5` for a far cheaper run). Thinking is always on for this model, so replies contain thinking blocks. The API requires them, with their signatures, to be sent back unchanged on the next turn, so the loop's content types gained `ThinkingBlock` and `RedactedThinkingBlock`. The Ollama adapter ignores them.
+- The API rejects empty text blocks, so the adapter drops them when sending history.
+- `MessageParam` is a union type in this SDK version (user, assistant, system), not a class with a `Role` property.
+
+Verified without a key: the request built for a sample history (thinking block, tool use, tool result, an empty text block) serialises to the expected Messages API shape; a call with an invalid key and a call with no key both fail with the readable 401 message.
+
+Known limitations:
+
+- Not run against the real API, so anything the API validates beyond the shape (model access, token limits) is untested.
+- Server-side refusal `fallbacks` (recommended for this model) are not used; they need the beta endpoint and a second set of types.
+- Responses are not streamed and prompt caching is not used.
+
+## Choosing the model
+
+`ModelSelection` picks the `IModel` for the live run in `Program.cs`, so `AgentLoop` never changes:
+
+```bash
+dotnet run --project src/FlakyDetective.Agent -- --model scripted     # canned demo script, no LLM
+dotnet run --project src/FlakyDetective.Agent -- --model ollama       # default; local model
+dotnet run --project src/FlakyDetective.Agent -- --model anthropic    # Claude API, needs ANTHROPIC_API_KEY with credits
+```
+
+`--scripted`, `--ollama` and `--anthropic` are shortcuts. `OLLAMA_MODEL` (default `qwen2.5:3b`) and `ANTHROPIC_MODEL` (default `claude-opus-5-5`) choose the model name.

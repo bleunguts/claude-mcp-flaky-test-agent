@@ -241,17 +241,25 @@ foreach (var call in toolReply!.Message.ToolCalls ?? [])
 */
 #endregion
 
-#region 7. The live run: the agent loop with a real local model (issue #22)
-// WHAT:     The current default. Runs the agent loop against a local Ollama model and lets it
-//           decide which tools to call for the prompt below.
-// PREREQ:   Ollama running, model pulled (`ollama pull qwen2.5:3b`), solution built.
+#region 7. The live run: the agent loop with the model chosen on the command line (issues #22, #27)
+// WHAT:     Runs the agent loop against the model picked by ModelSelection and lets it decide
+//           which tools to call for the prompt below.
+// CHOOSE:   dotnet run --project src/FlakyDetective.Agent -- --model scripted|ollama|anthropic
+//           Default is ollama. OLLAMA_MODEL (default qwen2.5:3b) and ANTHROPIC_MODEL (default
+//           claude-opus-5-5) pick the model name.
+// PREREQ:   ollama:    Ollama running, model pulled (`ollama pull qwen2.5:3b`).
+//           anthropic: ANTHROPIC_API_KEY set, with credits. Without credits the API refuses the
+//                      request and AnthropicModel reports it as an error, which is still a good test
+//                      that the request was built and sent.
+//           Always:    solution built.
 // SWITCH:   Change `livePrompt` to try the other demo: "Use the ping tool and tell me what it returned."
 // LESSON:   With qwen2.5:3b the model chained find_test_source then read_source on its own, which
-//           is the whole point of the loop. Small models also pad their answers.
+//           is the whole point of the loop. Small models also pad their answers. The loop is the
+//           same for every model: only the IModel behind it changes.
 // OUTPUT:   Iteration log, then "Stopped: end_turn after 3 iterations" and the final AgentResult.
 Console.WriteLine("===================================================================== using Agent Loop");
-var liveHttp = new HttpClient { BaseAddress = new Uri("http://localhost:11434"), Timeout = TimeSpan.FromMinutes(5) };
-var liveModel = new OllamaModel(liveHttp, "qwen2.5:3b", 8192);
+var liveModel = ModelSelection.Create(args);
+Console.WriteLine($"Model: {liveModel.GetType().Name}");
 
 // string livePrompt = "Use the ping tool and tell me what it returned.";
 string livePrompt = "Find and read the Reset_clears_cache test";

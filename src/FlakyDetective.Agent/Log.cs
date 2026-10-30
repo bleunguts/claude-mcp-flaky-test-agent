@@ -35,6 +35,12 @@ public class Log
             case TextBlock textBlock:
                 Console.WriteLine($"Text: {textBlock.Text}");
                 break;
+            case ThinkingBlock thinkingBlock:
+                Console.WriteLine($"Thinking: ({thinkingBlock.Thinking.Length} chars shown, signature kept)");
+                break;
+            case RedactedThinkingBlock:
+                Console.WriteLine("Thinking: (redacted, kept)");
+                break;
             case ToolUseBlock toolUseBlock:
                 Console.WriteLine($"Tool Use: {toolUseBlock.Name}, Id: {toolUseBlock.Id}, Input: {string.Join(", ", toolUseBlock.Input.Select(kv => $"{kv.Key}={kv.Value}"))}");
                 break;

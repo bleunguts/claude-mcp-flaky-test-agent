@@ -12,12 +12,12 @@ A step-by-step build of an MCP server and a hand-written agentic loop that inves
 | 2 | MCP server scaffold + `run_test_n_times` tool (`dotnet test --filter`, parse .trx), tested in MCP Inspector | No | Done |
 | 3 | Code analyzer tools (`read_source`, `find_test_source`) | No | Done |
 | 4 | Hand-coded agentic loop: MCP client + loop, driven by a scripted stub model | No | Done |
-| 5 | Investigation prompt + first diagnoses, scored against ground truth | Yes | Planned |
+| 5 | Investigation prompt + first diagnoses, scored against ground truth (local Ollama model, no credits) | No | Planned |
 | 6 | TeamCity in Docker + `get_flaky_candidates` tool | No | Planned |
 | 7 | Fix → verify 10x → git branch/PR tools | Yes | Planned |
 | 8 | Notifier, guardrails, audit log, final scorecard | Light | Planned |
 
-Sessions 1–4 and 6 need no API credits (Session 4 runs on a scripted stub model). Sessions 5 and 7 need a real model: either the Claude API, with a Console API key supplied through the `ANTHROPIC_API_KEY` environment variable and never committed, or a local model behind the same `IModel` interface.
+Sessions 1–4 and 6 need no API credits (Session 4 runs on a scripted stub model). Sessions 5 and 7 need a real model, and a free local one is available through Ollama (see "Ollama model adapter" below). A paid Claude API adapter can be added behind the same `IModel` interface later, with a Console API key supplied through the `ANTHROPIC_API_KEY` environment variable and never committed.
 
 ## How it is built
 
@@ -139,4 +139,35 @@ Known limitations:
 
 - Tool errors for rejected arguments are generic ("An error occurred invoking 'read_source'"), so a real model has little to go on.
 - The stub never produces a `tool_use` reply without tool blocks; a real model could.
-- A real model adapter (Claude API or a local model) is not yet written.
+- A real model adapter was added afterwards (see "Ollama model adapter"); a Claude API adapter is not written.
+
+## Ollama model adapter
+
+`OllamaModel` implements `IModel` against a local [Ollama](https://ollama.com) server, so the same `AgentLoop` can run with a real model and no paid API. It posts to `POST /api/chat` with `stream: false` and translates in both directions:
+
+- Our tool definitions become Ollama `tools` (the MCP tool's JSON schema is passed through as `parameters`).
+- Our history becomes Ollama messages: an assistant `tool_use` block becomes a `tool_calls` entry, and each `tool_result` block becomes its own `role: tool` message carrying the tool's name (looked up from the earlier `tool_use` by id).
+- The reply becomes a `ModelResponse`: text and tool calls become blocks, using the id Ollama supplies on each call (one is generated if it is missing).
+
+Things learned while building it:
+
+- `done_reason` is `"stop"` even when the model asks for a tool, so the stop reason is decided by whether the reply contains tool calls, not by `done_reason`.
+- Ollama's default context window is small, so `num_ctx` is set explicitly (8192) to stop the prompt being silently truncated.
+- Arguments from the model arrive as JSON values and are passed on to `CallToolAsync` unchanged.
+
+Usage:
+
+```bash
+ollama pull qwen2.5:3b
+dotnet run --project src/FlakyDetective.Agent -- --ollama
+```
+
+The model name comes from the `OLLAMA_MODEL` environment variable and defaults to `qwen2.5:3b`. Without `--ollama` the scripted model is used.
+
+Verified: with `qwen2.5:3b` on a CPU-only laptop, the model called `ping` and answered, and for "find and read the Reset_clears_cache test" it chained `find_test_source` then `read_source` on its own and returned the code in 3 iterations.
+
+Known limitations:
+
+- Errors (Ollama not running, model not pulled, timeout) end the program with a message; the loop does not recover.
+- Small models pad answers and can call tools badly; the investigation prompt in Session 5 has to account for that.
+- Responses are not streamed.

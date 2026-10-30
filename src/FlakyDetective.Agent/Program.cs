@@ -2,6 +2,7 @@
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
 using System.Text.Json;
+using System.Threading.Tasks.Dataflow;
 
 Console.WriteLine("Hello, World! from the FlakyDetective.Agent");
 var root = Helpers.FindSlnFolderRecursively(AppContext.BaseDirectory);   
@@ -116,6 +117,26 @@ Console.WriteLine("=============================================================
 string prompt = "Find and read the Reset_clears_cache test";
 var result = await AgentLoop.RunLoopAsync(CreateDemoScript(), client, toolDefinitions, prompt, 10);
 Console.WriteLine($"Final result: {result}");
+
+result = await AgentLoop.RunLoopAsync(RunawayModel(), client, toolDefinitions, prompt, 5);
+Console.WriteLine($"Final result: {result}");
+
+Console.WriteLine("=====================================================================");
+result = await AgentLoop.RunLoopAsync(UnknownTool(), client, toolDefinitions, prompt, 5);
+Console.WriteLine($"Final result: {result}");
+
+Console.WriteLine("=====================================================================");
+result = await AgentLoop.RunLoopAsync(DeniedFile(), client, toolDefinitions, prompt, 5);
+Console.WriteLine($"Final result: {result}");
+
+Console.WriteLine("=====================================================================");
+result = await AgentLoop.RunLoopAsync(EscapeAttempt(), client, toolDefinitions, prompt, 5);
+Console.WriteLine($"Final result: {result}");
+
+Console.WriteLine("=====================================================================");
+result = await AgentLoop.RunLoopAsync(BadArgument(), client, toolDefinitions, prompt, 5);
+Console.WriteLine($"Final result: {result}");
+
 static ScriptedModel CreateDemoScript() => new ScriptedModel([
     messages =>
     {
@@ -150,3 +171,79 @@ static ScriptedModel CreateDemoScript() => new ScriptedModel([
         return Script.Finish("Done!");
     }
 ]);
+
+static ScriptedModel UnknownTool() => new ScriptedModel([
+    messages =>
+    {
+        Console.WriteLine("Step 1: Call unknown tool");
+        return Script.CallTool("call_1", "no_such_tool", []);
+    },
+    messages =>
+    {
+        Console.WriteLine("Step 2: Finish");
+        return Script.Finish("Done!");
+    }
+]);
+
+static ScriptedModel DeniedFile() => new ScriptedModel([
+    messages =>
+    {
+        Console.WriteLine("Step 1: Call read_source with denied file argument");
+        return Script.CallTool("call_1", "read_source", new Dictionary<string, object?>
+        {
+            { "path", ".env" }       
+        });
+    },
+    messages =>
+    {
+        Console.WriteLine("Step 2: Finish");
+        return Script.Finish("Done!");
+    }
+]);
+
+static ScriptedModel EscapeAttempt() => new ScriptedModel([
+    messages =>
+    {
+        Console.WriteLine("Step 1: Call read_source with escape");
+        return Script.CallTool("call_1", "read_source", new Dictionary<string, object?>
+        {
+            { "path", "../README.md" }
+        });
+    },
+    messages =>
+    {
+        Console.WriteLine("Step 2: Finish");
+        return Script.Finish("Done!");
+    }
+]);
+
+static ScriptedModel BadArgument() => new ScriptedModel([
+    messages =>
+    {
+        Console.WriteLine("Step 1: Call read_source with bad argument");
+        return Script.CallTool("call_1", "read_source", new Dictionary<string, object?>
+        {
+            { "path", "sandbox/FlakyLab/FlakyLabTests.cs" },
+            { "startLine", "abc" },
+            { "endLine", 101 }
+        });
+    },
+    messages =>
+    {
+        Console.WriteLine("Step 2: Finish");
+        return Script.Finish("Done!");
+    }
+]);
+
+static IModel RunawayModel() => new RunawayModel();
+public class RunawayModel : IModel
+{
+    private int _calls;
+
+    public Task<ModelResponse> CompleteAsync(List<Message> messages, IReadOnlyList<ToolDefinition> tools, CancellationToken cancellationToken = default)
+    {
+        _calls++;
+        Console.WriteLine($"RunawayModel: asking for ping again (call {_calls})");
+        return Task.FromResult(Script.CallTool($"call_{_calls}", "ping", []));
+    }
+}

@@ -2,7 +2,7 @@
 
 A step-by-step build of an MCP server and a hand-written agentic loop that investigates flaky tests, proposes and verifies fixes, and raises pull requests. The project doubles as a guided tour of agentic architecture: the tool producer (MCP server), the tool orchestrator (the loop), and the guardrails around them are each built in the open, one small session at a time.
 
-**Status:** Sessions 1 to 3 complete, Session 4 next.
+**Status:** Sessions 1 to 4 complete, Session 5 next.
 
 ## Sessions
 
@@ -11,13 +11,13 @@ A step-by-step build of an MCP server and a hand-written agentic loop that inves
 | 1 | Architecture + FlakyLab sandbox | No | Done |
 | 2 | MCP server scaffold + `run_test_n_times` tool (`dotnet test --filter`, parse .trx), tested in MCP Inspector | No | Done |
 | 3 | Code analyzer tools (`read_source`, `find_test_source`) | No | Done |
-| 4 | Hand-coded agentic loop: Anthropic C# SDK + MCP client | Yes | Planned |
+| 4 | Hand-coded agentic loop: MCP client + loop, driven by a scripted stub model | No | Done |
 | 5 | Investigation prompt + first diagnoses, scored against ground truth | Yes | Planned |
 | 6 | TeamCity in Docker + `get_flaky_candidates` tool | No | Planned |
 | 7 | Fix → verify 10x → git branch/PR tools | Yes | Planned |
 | 8 | Notifier, guardrails, audit log, final scorecard | Light | Planned |
 
-Sessions 1–3 and 6 need no API credits. Sessions 4, 5 and 7 call the Claude API directly and need a Console API key with credits, supplied through the `ANTHROPIC_API_KEY` environment variable and never committed.
+Sessions 1–4 and 6 need no API credits (Session 4 runs on a scripted stub model). Sessions 5 and 7 need a real model: either the Claude API, with a Console API key supplied through the `ANTHROPIC_API_KEY` environment variable and never committed, or a local model behind the same `IModel` interface.
 
 ## How it is built
 
@@ -113,3 +113,30 @@ Known limitations:
 
 - Symbolic links inside the solution are not resolved, so a link pointing outside the root would pass the check.
 - `find_test_source` uses text matching, not a parser. It finds methods declared as `void` or `Task`, and counts braces inside strings and comments. Roslyn would remove these limits.
+
+## Session 4: the agentic loop
+
+`FlakyDetective.Agent` is the other half of the system: an MCP client that launches the server over stdio, lists its tools, and runs a hand-written loop.
+
+The loop:
+
+1. Send the message history and the tool definitions to the model.
+2. If the reply's stop reason is not `tool_use`, stop: the reply is the answer.
+3. Otherwise run every `tool_use` block through the MCP client's `CallToolAsync` and send all the results back in one user message of `tool_result` blocks, each carrying the id of the request it answers.
+4. Repeat, up to an iteration cap.
+
+Design points:
+
+- **The model sits behind `IModel`.** The loop only needs "history and tools in, response out", so it does not care whether the answer comes from a script, a local model or Claude. The message and block types (`text`, `tool_use`, `tool_result`, stop reason) mirror the Anthropic Messages API, so a real adapter is a translation.
+- **Session 4 runs on a scripted stub model**, so it needs no API credits. A stub cannot reason: it replays a fixed sequence (`ping`, then `find_test_source`, then `read_source` using the lines found, then done). That shows the loop mechanics honestly but not diagnosis, which starts in Session 5.
+- **Two kinds of tool failure** both reach the model. A tool's own refusal (a denied path) comes back as normal text with an `error` field. A call the SDK rejects or that throws becomes a `tool_result` with `is_error` set. Neither crashes the loop.
+- **The iteration cap is a guardrail.** The loop result says whether it stopped normally or hit the cap.
+- **Every step is logged** to the console: iteration, what the model asked for, and each (truncated) result.
+
+Verified with scripts: the normal run (4 iterations), a runaway model (stops at the cap), an unknown tool, a denied file, a path escape and a bad argument. All end sensibly and none leak file contents.
+
+Known limitations:
+
+- Tool errors for rejected arguments are generic ("An error occurred invoking 'read_source'"), so a real model has little to go on.
+- The stub never produces a `tool_use` reply without tool blocks; a real model could.
+- A real model adapter (Claude API or a local model) is not yet written.

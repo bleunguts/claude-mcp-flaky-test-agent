@@ -1,7 +1,9 @@
 ﻿using FlakyDetective.Agent;
 using ModelContextProtocol.Client;
 using ModelContextProtocol.Protocol;
+using System.Net.Http.Json;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Threading.Tasks.Dataflow;
 
 Console.WriteLine("Hello, World! from the FlakyDetective.Agent");
@@ -12,7 +14,7 @@ var serverDll = Path.Combine(root, "src", "FlakyDetective.McpServer", "bin", "De
 Console.WriteLine($"Starting MCP server from: {serverDll}");
 Console.WriteLine($"File exists: {File.Exists(serverDll)}");
 
-Console.WriteLine("=====================================================================> setup");
+Console.WriteLine("=====================================================================> tools listed");
 var transport = new StdioClientTransport(new StdioClientTransportOptions
 {
     Name = "FlakyDetective.McpServer",
@@ -30,11 +32,10 @@ foreach (var tool in toolDefinitions)
     Console.WriteLine($"Tool: {tool.Name} - {tool.Description} - {tool.InputSchema}");
 }
 
-Console.WriteLine("=====================================================================> tools listed");
+Console.WriteLine("=====================================================================> tools invoked");
 
 // call ping
 Log.PrintToolResult(await client.CallToolAsync("ping"));
-Console.WriteLine("=====================================================================");
 
 // call find_test_source with arg 
 Log.PrintToolResult(await client.CallToolAsync(
@@ -43,7 +44,6 @@ Log.PrintToolResult(await client.CallToolAsync(
     {
         { "testName", "Reset_clears_cache" }
     }));
-Console.WriteLine("=====================================================================");
 
 Log.PrintToolResult(await client.CallToolAsync("read_source",
     new Dictionary<string, object?>
@@ -52,7 +52,6 @@ Log.PrintToolResult(await client.CallToolAsync("read_source",
         ["startLine"] = 83,
         ["endLine"] = 92,
     }));
-Console.WriteLine("=====================================================================");
 Log.PrintToolResult(await client.CallToolAsync("read_source",
     new Dictionary<string, object?>
     {
@@ -69,7 +68,8 @@ Log.PrintToolResult(await client.CallToolAsync("read_source",
         ["endLine"] = 92,
     }));
 
-/*
+#region building blocks for the scripted model and agent loop tests
+/* 
 Console.WriteLine("===================================================================== conversation");
 
 var conversation = new List<Message>
@@ -112,29 +112,83 @@ for(int i = 0; i < 4; i++)
     }
 }
 */
+#endregion 
 
+#region the agent loop
+/* the agent loop
 Console.WriteLine("===================================================================== using Agent Loop");
 string prompt = "Find and read the Reset_clears_cache test";
 var result = await AgentLoop.RunLoopAsync(CreateDemoScript(), client, toolDefinitions, prompt, 10);
 Console.WriteLine($"Final result: {result}");
+*/
+#endregion
 
+#region error handling tests
+/*
+Console.WriteLine("===================================================================== error handling"); 
 result = await AgentLoop.RunLoopAsync(RunawayModel(), client, toolDefinitions, prompt, 5);
 Console.WriteLine($"Final result: {result}");
 
-Console.WriteLine("=====================================================================");
 result = await AgentLoop.RunLoopAsync(UnknownTool(), client, toolDefinitions, prompt, 5);
 Console.WriteLine($"Final result: {result}");
 
-Console.WriteLine("=====================================================================");
 result = await AgentLoop.RunLoopAsync(DeniedFile(), client, toolDefinitions, prompt, 5);
 Console.WriteLine($"Final result: {result}");
 
-Console.WriteLine("=====================================================================");
 result = await AgentLoop.RunLoopAsync(EscapeAttempt(), client, toolDefinitions, prompt, 5);
 Console.WriteLine($"Final result: {result}");
 
-Console.WriteLine("=====================================================================");
 result = await AgentLoop.RunLoopAsync(BadArgument(), client, toolDefinitions, prompt, 5);
+Console.WriteLine($"Final result: {result}");
+*/
+#endregion
+
+#region OllamaChatRequest tests
+/*
+Console.WriteLine("===================================================================== ollama chat requests");
+var http = new HttpClient { BaseAddress = new Uri("http://localhost:11434"), Timeout = TimeSpan.FromMinutes(5) };
+var jsonOptions = new JsonSerializerOptions { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
+
+var request = new OllamaChatRequest(
+    "qwen2.5:3b",
+    [new OllamaMessage("user", "Say hello in five words.")],
+    null, false, new OllamaOptions(8192));
+var httpResponse = await http.PostAsJsonAsync("/api/chat", request, jsonOptions);
+httpResponse.EnsureSuccessStatusCode();
+var reply = await httpResponse.Content.ReadFromJsonAsync<OllamaChatResponse>();
+Console.WriteLine(reply!.Message.Content);
+
+var pingTool = new OllamaTool("function",
+    new OllamaFunctionDefinition(
+        "ping",
+        "Pings the server with a message and returns a pong response.",
+        JsonDocument.Parse("""{"type":"object","properties":{},"required":[]}""").RootElement));
+
+var toolRequest = new OllamaChatRequest(
+    "qwen2.5:3b",
+    [new OllamaMessage("user", "Use the ping tool and tell me what it returned.")],
+    [pingTool],
+    false,
+    new OllamaOptions(8192));
+
+var toolHttpResponse = await http.PostAsJsonAsync("/api/chat", toolRequest, jsonOptions);
+toolHttpResponse.EnsureSuccessStatusCode();
+var toolReply = await toolHttpResponse.Content.ReadFromJsonAsync<OllamaChatResponse>();
+foreach (var call in toolReply!.Message.ToolCalls ?? [])
+{
+    Console.WriteLine($"Tool call: {call.Function.Name}, id: {call.Id}");
+}
+*/
+#endregion
+
+Console.WriteLine("===================================================================== using Agent Loop");
+var http = new HttpClient { BaseAddress = new Uri("http://localhost:11434"), Timeout = TimeSpan.FromMinutes(5) };
+var model = new OllamaModel(http, "qwen2.5:3b", 8192);
+
+/* string prompt = "Use the ping tool and tell me what it returned."; */
+string prompt = "Find and read the Reset_clears_cache test";
+
+var result = await AgentLoop.RunLoopAsync(model, client, toolDefinitions, prompt, 8);
 Console.WriteLine($"Final result: {result}");
 
 static ScriptedModel CreateDemoScript() => new ScriptedModel([

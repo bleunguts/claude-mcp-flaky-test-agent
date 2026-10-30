@@ -144,3 +144,7 @@ for(int i = 0; i < 4; i++)
     }
 }
 
+Console.WriteLine("===================================================================== using Agent Loop");
+string prompt = "Find and read the Reset_clears_cache test";
+var result = await ScriptedModel.RunLoopAsync(script, client, toolDefinitions, prompt, 10);
+Console.WriteLine($"Final result: {result}");   

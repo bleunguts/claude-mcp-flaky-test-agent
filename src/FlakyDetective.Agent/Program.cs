@@ -1,0 +1,249 @@
+﻿using FlakyDetective.Agent;
+using ModelContextProtocol.Client;
+using ModelContextProtocol.Protocol;
+using System.Text.Json;
+using System.Threading.Tasks.Dataflow;
+
+Console.WriteLine("Hello, World! from the FlakyDetective.Agent");
+var root = Helpers.FindSlnFolderRecursively(AppContext.BaseDirectory);   
+Console.WriteLine($"Found solution folder: {root}");
+
+var serverDll = Path.Combine(root, "src", "FlakyDetective.McpServer", "bin", "Debug", "net10.0", "FlakyDetective.McpServer.dll");
+Console.WriteLine($"Starting MCP server from: {serverDll}");
+Console.WriteLine($"File exists: {File.Exists(serverDll)}");
+
+Console.WriteLine("=====================================================================> setup");
+var transport = new StdioClientTransport(new StdioClientTransportOptions
+{
+    Name = "FlakyDetective.McpServer",
+    Command = "dotnet",
+    Arguments = [serverDll],
+});
+// list tools
+await using var client = await McpClient.CreateAsync(transport);
+var tools = await client.ListToolsAsync();
+var toolDefinitions = tools
+    .Select(t => new ToolDefinition(t.Name, t.Description, t.JsonSchema))
+    .ToList();
+foreach (var tool in toolDefinitions)
+{
+    Console.WriteLine($"Tool: {tool.Name} - {tool.Description} - {tool.InputSchema}");
+}
+
+Console.WriteLine("=====================================================================> tools listed");
+
+// call ping
+Log.PrintToolResult(await client.CallToolAsync("ping"));
+Console.WriteLine("=====================================================================");
+
+// call find_test_source with arg 
+Log.PrintToolResult(await client.CallToolAsync(
+    "find_test_source",
+    new Dictionary<string, object>
+    {
+        { "testName", "Reset_clears_cache" }
+    }));
+Console.WriteLine("=====================================================================");
+
+Log.PrintToolResult(await client.CallToolAsync("read_source",
+    new Dictionary<string, object?>
+    {
+        ["path"] = "sandbox/FlakyLab/FlakyLabTests.cs",
+        ["startLine"] = 83,
+        ["endLine"] = 92,
+    }));
+Console.WriteLine("=====================================================================");
+Log.PrintToolResult(await client.CallToolAsync("read_source",
+    new Dictionary<string, object?>
+    {
+        ["path"] = ".env",
+        ["startLine"] = 83,
+        ["endLine"] = 92,
+    }));
+
+Log.PrintToolResult(await client.CallToolAsync("read_source",
+    new Dictionary<string, object?>
+    {
+        ["path"] = "",
+        ["startLine"] = "44",
+        ["endLine"] = 92,
+    }));
+
+/*
+Console.WriteLine("===================================================================== conversation");
+
+var conversation = new List<Message>
+{
+    new Message("user", [new TextBlock("Where is the test Reset_clears_cache?")]),
+    new Message("assistant", [new ToolUseBlock("call_1", "find_test_source", new Dictionary<string, object?> { { "testName", "Reset_clears_cache" } })]),
+    
+    new Message("user", [new ToolResultBlock("call_1", "{\"testName\":\"Reset_clears_cache\",\"matches\":[{\"file\":\"sandbox/FlakyLab/FlakyLabTests.cs\",\"startLine\":83,\"endLine\":89}]}", false)]),
+    //new Message("assistant", [new TextBlock("It is in sandbox/FlakyLab/FlakyLabTests.cs, lines 83 to 89.")]),
+};
+
+foreach (var message in conversation)
+{
+    Console.WriteLine($"Role: {message.Role}, Kinds: {string.Join(", ", message.Content.Select(b => b.GetType().Name))}");
+    foreach (var block in message.Content)
+    {
+        Log.Print(block);
+    }
+}
+
+var modelResponse1 = Script.CallTool("call_1", "ping", []);
+Log.PrintModelResponse(modelResponse1);
+var modelResponse2 = Script.CallTool("call_2", "find_test_source", new Dictionary<string, object?> { { "testName", "Reset_clears_cache" } });
+Log.PrintModelResponse(modelResponse2);
+
+Console.WriteLine("===================================================================== using ScriptedModel");
+
+var script = CreateDemoScript();    
+for(int i = 0; i < 4; i++)
+{
+    try
+    {
+        var response = await script.CompleteAsync(conversation, toolDefinitions);
+        Console.WriteLine($"Script completed with stop reason: {response.StopReason}");
+        Log.PrintModelResponse(response);
+    }
+    catch (InvalidOperationException ex)
+    {
+        Console.WriteLine($"Script failed with exception: {ex.Message}");
+    }
+}
+*/
+
+Console.WriteLine("===================================================================== using Agent Loop");
+string prompt = "Find and read the Reset_clears_cache test";
+var result = await AgentLoop.RunLoopAsync(CreateDemoScript(), client, toolDefinitions, prompt, 10);
+Console.WriteLine($"Final result: {result}");
+
+result = await AgentLoop.RunLoopAsync(RunawayModel(), client, toolDefinitions, prompt, 5);
+Console.WriteLine($"Final result: {result}");
+
+Console.WriteLine("=====================================================================");
+result = await AgentLoop.RunLoopAsync(UnknownTool(), client, toolDefinitions, prompt, 5);
+Console.WriteLine($"Final result: {result}");
+
+Console.WriteLine("=====================================================================");
+result = await AgentLoop.RunLoopAsync(DeniedFile(), client, toolDefinitions, prompt, 5);
+Console.WriteLine($"Final result: {result}");
+
+Console.WriteLine("=====================================================================");
+result = await AgentLoop.RunLoopAsync(EscapeAttempt(), client, toolDefinitions, prompt, 5);
+Console.WriteLine($"Final result: {result}");
+
+Console.WriteLine("=====================================================================");
+result = await AgentLoop.RunLoopAsync(BadArgument(), client, toolDefinitions, prompt, 5);
+Console.WriteLine($"Final result: {result}");
+
+static ScriptedModel CreateDemoScript() => new ScriptedModel([
+    messages =>
+    {
+        Console.WriteLine("Step 1: Call ping");
+        return Script.CallTool("call_1", "ping", []);
+    },
+    messages =>
+    {
+        Console.WriteLine("Step 2: Call find_test_source");
+        return Script.CallTool("call_2", "find_test_source", new Dictionary<string, object?> { { "testName", "Reset_clears_cache" } });
+    },
+    messages =>
+    {
+        Console.WriteLine("Step 3: Read");
+        var lastMessage = messages.Last();
+        var answer = lastMessage.Content.OfType<ToolResultBlock>().First();
+        var json = JsonDocument.Parse(answer.Content).RootElement;
+        var match = json.GetProperty("matches")[0];
+        var filePath = match.GetProperty("file").GetString();
+        var startLine = match.GetProperty("startLine").GetInt32();
+        var endLine = match.GetProperty("endLine").GetInt32();
+        return Script.CallTool("call_3", "read_source", new Dictionary<string, object?>
+        {
+            { "path", filePath },
+            { "startLine", startLine },
+            { "endLine", endLine }
+        });
+    },
+    messages =>
+    {
+        Console.WriteLine("Step 4: Finish");
+        return Script.Finish("Done!");
+    }
+]);
+
+static ScriptedModel UnknownTool() => new ScriptedModel([
+    messages =>
+    {
+        Console.WriteLine("Step 1: Call unknown tool");
+        return Script.CallTool("call_1", "no_such_tool", []);
+    },
+    messages =>
+    {
+        Console.WriteLine("Step 2: Finish");
+        return Script.Finish("Done!");
+    }
+]);
+
+static ScriptedModel DeniedFile() => new ScriptedModel([
+    messages =>
+    {
+        Console.WriteLine("Step 1: Call read_source with denied file argument");
+        return Script.CallTool("call_1", "read_source", new Dictionary<string, object?>
+        {
+            { "path", ".env" }       
+        });
+    },
+    messages =>
+    {
+        Console.WriteLine("Step 2: Finish");
+        return Script.Finish("Done!");
+    }
+]);
+
+static ScriptedModel EscapeAttempt() => new ScriptedModel([
+    messages =>
+    {
+        Console.WriteLine("Step 1: Call read_source with escape");
+        return Script.CallTool("call_1", "read_source", new Dictionary<string, object?>
+        {
+            { "path", "../README.md" }
+        });
+    },
+    messages =>
+    {
+        Console.WriteLine("Step 2: Finish");
+        return Script.Finish("Done!");
+    }
+]);
+
+static ScriptedModel BadArgument() => new ScriptedModel([
+    messages =>
+    {
+        Console.WriteLine("Step 1: Call read_source with bad argument");
+        return Script.CallTool("call_1", "read_source", new Dictionary<string, object?>
+        {
+            { "path", "sandbox/FlakyLab/FlakyLabTests.cs" },
+            { "startLine", "abc" },
+            { "endLine", 101 }
+        });
+    },
+    messages =>
+    {
+        Console.WriteLine("Step 2: Finish");
+        return Script.Finish("Done!");
+    }
+]);
+
+static IModel RunawayModel() => new RunawayModel();
+public class RunawayModel : IModel
+{
+    private int _calls;
+
+    public Task<ModelResponse> CompleteAsync(List<Message> messages, IReadOnlyList<ToolDefinition> tools, CancellationToken cancellationToken = default)
+    {
+        _calls++;
+        Console.WriteLine($"RunawayModel: asking for ping again (call {_calls})");
+        return Task.FromResult(Script.CallTool($"call_{_calls}", "ping", []));
+    }
+}

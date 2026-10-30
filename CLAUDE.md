@@ -21,7 +21,7 @@ sandbox/FlakyLab              -> NUnit project with deliberately flaky tests: th
 Planned MCP tools: `get_flaky_candidates` (TeamCity REST), `run_test_n_times`, `read_source`, `git_branch_commit_pr`, `notify`.
 
 ## Hard rules
-- **Hand-code the loop.** Use `client.Messages.Create` and handle `tool_use` → MCP `CallToolAsync` → `tool_result` → repeat until `end_turn`. Do NOT use `IChatClient` + `UseFunctionInvocation()`, because that automates the exact thing I need to demonstrate.
+- **Hand-code the loop.** Handle `tool_use` → MCP `CallToolAsync` → `tool_result` → repeat until `end_turn`. A real model adapter uses `client.Messages.Create`. Do NOT use `IChatClient` + `UseFunctionInvocation()`, because that automates the exact thing I need to demonstrate. Until there are API credits, the loop runs against a scripted stub behind the `IModel` interface; the message types mirror the Anthropic Messages API.
 - The MCP server contains **no LLM calls**. It's deterministic C#.
 - The server uses stdio, so **log to stderr only**. stdout is the protocol channel.
 - **Do not diagnose or fix the sandbox tests yourself, and don't add comments explaining why they flake.** Finding the causes is the agent's job, and I score it against answers kept outside this repo.
@@ -41,4 +41,5 @@ The session plan, status and open design questions live in [ROADMAP.md](ROADMAP.
 ## Session log
 - Session 1 (complete): architecture agreed; FlakyLabTests.cs written (6 tests, including 1 stable control); sandbox switched from xUnit to NUnit; FlakyDetective.slnx created with sandbox/FlakyLab; 10 consecutive runs gave 1 to 4 failures out of 6, so the sandbox is confirmed flaky.
 - Session 2 (complete): `FlakyDetective.McpServer` (stdio, stderr logging) with `ping` and `run_test_n_times` (sequential `dotnet test` runs, `.trx` parsing, per-run rows plus per-test summaries). Verified in MCP Inspector, including empty-filter handling. The sandbox must be built beforehand (`--no-build`).
-- Session 3 (complete): `read_source` and `find_test_source` tools behind `PathGuard` (root = solution folder computed server-side, deny list for `.git`, `.claude`, `.env*`, `GROUND_TRUTH*`, build output; text/source extensions only). Verified in MCP Inspector. `find_test_source` is text-based, not Roslyn. Next: Session 4 (hand-coded agentic loop).
+- Session 3 (complete): `read_source` and `find_test_source` tools behind `PathGuard` (root = solution folder computed server-side, deny list for `.git`, `.claude`, `.env*`, `GROUND_TRUTH*`, build output; text/source extensions only). Verified in MCP Inspector. `find_test_source` is text-based, not Roslyn.
+- Session 4 (complete): `FlakyDetective.Agent` is an MCP client (stdio, launches the built server dll) with a hand-written loop behind `IModel`, an iteration cap and step logging. Runs on a scripted stub model, so no API credits. Verified with six scripts: normal run, runaway (stops at the cap), unknown tool, denied file, path escape, bad argument. Next: Session 5 (investigation prompt and diagnoses; needs a real model, API or local).

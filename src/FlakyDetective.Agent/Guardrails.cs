@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace FlakyDetective.Agent;
@@ -81,4 +82,94 @@ public static class Grounding
     }
 
     private static string RemoveWhitespace(string text) => Regex.Replace(text, @"\s+", "");
+}
+
+public static class Measured
+{
+    // What the tools really measured, read from their structured results and not from the model's wording.
+    // The model understands "passes alone, fails in the suite" but swaps the numbers, so a person scoring a
+    // run compares its Failure rate line with these lines.
+    //   MEASURED Reset_clears_cache: alone 0/10 failed; in the suite 6/10 failed
+    public static List<string> Lines(IReadOnlyList<ToolExecution> executions)
+    {
+        var lines = new List<string>();
+        var batches = new List<Batch>();
+
+        foreach (var execution in executions.Where(e => e.Name == "run_test_n_times" && !e.IsError))
+        {
+            var batch = Parse(execution.Result);
+            if (batch == null)
+            {
+                lines.Add("MEASURED: a run_test_n_times result could not be read");
+            }
+            else if (batch.Error != null)
+            {
+                lines.Add($"MEASURED: run_test_n_times returned an error: {batch.Error}");
+            }
+            else
+            {
+                batches.Add(batch);
+            }
+        }
+
+        // The latest whole-suite batch, and the latest batch for each test that was run on its own.
+        var suite = batches.LastOrDefault(b => string.IsNullOrWhiteSpace(b.Filter));
+        var targets = batches.Where(b => !string.IsNullOrWhiteSpace(b.Filter)).Select(b => b.Filter!.Trim()).Distinct().ToList();
+
+        foreach (var target in targets)
+        {
+            var alone = batches.Last(b => b.Filter?.Trim() == target);
+            var aloneSummary = alone.Summaries.FirstOrDefault(s => s.TestName == target)
+                               ?? (alone.Summaries.Count == 1 ? alone.Summaries[0] : null);
+            var suiteSummary = suite?.Summaries.FirstOrDefault(s => s.TestName == target);
+            lines.Add($"MEASURED {target}: alone {Describe(aloneSummary)}; in the suite {Describe(suiteSummary)}");
+        }
+
+        if (targets.Count == 0 && suite != null)
+        {
+            lines.Add("MEASURED in the suite: " + string.Join(", ", suite.Summaries.Select(s => $"{s.TestName} {s.Failed}/{s.Runs}")));
+        }
+
+        return lines;
+    }
+
+    private static string Describe(TestCount? count) =>
+        count == null ? "not measured" : $"{count.Failed}/{count.Runs} failed";
+
+    private static Batch? Parse(string json)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            var root = document.RootElement;
+
+            var error = root.TryGetProperty("error", out var errorElement) && errorElement.ValueKind == JsonValueKind.String
+                ? errorElement.GetString()
+                : null;
+            var filter = root.TryGetProperty("testFilter", out var filterElement) && filterElement.ValueKind == JsonValueKind.String
+                ? filterElement.GetString()
+                : null;
+
+            var summaries = new List<TestCount>();
+            if (root.TryGetProperty("testSummaries", out var array) && array.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in array.EnumerateArray())
+                {
+                    summaries.Add(new TestCount(
+                        item.GetProperty("testName").GetString() ?? "",
+                        item.GetProperty("runs").GetInt32(),
+                        item.GetProperty("failed").GetInt32()));
+                }
+            }
+
+            return new Batch(filter, error, summaries);
+        }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            return null;
+        }
+    }
+
+    private record Batch(string? Filter, string? Error, List<TestCount> Summaries);
+    private record TestCount(string TestName, int Runs, int Failed);
 }

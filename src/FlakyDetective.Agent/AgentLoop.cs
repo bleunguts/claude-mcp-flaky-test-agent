@@ -141,6 +141,7 @@ public class AgentLoop
     {
         Log.LoopStopped(reason, iterations);
         Log.ToolsCalled(toolsCalled);
+        Log.Measured(Measured.Lines(executions));
 
         var missing = nextMissingStep?.Invoke(executions);
         Log.Incomplete(missing);

@@ -150,13 +150,16 @@ public static class GuardrailScripts
 
     // Cites a tool it never called and quotes a result that does not exist. With no required steps set,
     // the loop accepts the answer and reports UNGROUNDED lines (guardrail 3, report only).
+    // Note: the invented quote must not contain a method declaration such as "public void <TestName>()".
+    // find_test_source scans every .cs file under the solution, so such text in this file would be
+    // returned as a second match for that test.
     public static ScriptedModel InventedEvidence() => new ScriptedModel([
         messages => Script.CallTool("call_1", "ping", []),
         messages => Script.Finish(
             "Test: Mid_is_positive\n" +
             "Verdict: flaky\n" +
             "Evidence:\n" +
-            "- read_source: {\"path\":\"sandbox/FlakyLab/FlakyLabTests.cs\",\"text\":\"[Fact] public void Mid_is_positive()\"}\n" +
+            "- read_source: {\"path\":\"sandbox/FlakyLab/FlakyLabTests.cs\",\"text\":\"invented source for the test\"}\n" +
             "- ping: {\"result\":\"not what the tool said\"}\n" +
             "Confidence: low"),
     ]);

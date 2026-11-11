@@ -245,7 +245,10 @@ foreach (var call in toolReply!.Message.ToolCalls ?? [])
 // WHAT:     The current default. Runs the agent loop against a local Ollama model and lets it
 //           decide which tools to call for the prompt below.
 // PREREQ:   Ollama running, model pulled (`ollama pull qwen2.5:3b`), solution built.
-// SWITCH:   Change `livePrompt` to try the other demo: "Use the ping tool and tell me what it returned."
+// PROMPT:   Taken from the command line, so a script can run it repeatedly:
+//             dotnet run --project src/FlakyDetective.Agent --no-build -- "Investigate the test Reset_clears_cache."
+//           With no arguments it uses the default below. scripts/run_agent_n_times.ps1 runs it N times
+//           per test and saves each log. Another demo prompt: "Use the ping tool and tell me what it returned."
 // LESSON:   With qwen2.5:3b the model chained find_test_source then read_source on its own, which
 //           is the whole point of the loop. Small models also pad their answers.
 // OUTPUT:   Iteration log, then "Stopped: end_turn after 3 iterations" and the final AgentResult.
@@ -253,8 +256,8 @@ Console.WriteLine("=============================================================
 var liveHttp = new HttpClient { BaseAddress = new Uri("http://localhost:11434"), Timeout = TimeSpan.FromMinutes(5) };
 var liveModel = new OllamaModel(liveHttp, "qwen2.5:3b", 8192);
 
-// string livePrompt = "Use the ping tool and tell me what it returned.";
-string livePrompt = "Investigate the test Mid_is_positive.";
+string livePrompt = args.Length > 0 ? string.Join(" ", args) : "Investigate the test Mid_is_positive.";
+Console.WriteLine($"Prompt: {livePrompt}");
 
 var liveResult = await AgentLoop.RunLoopAsync(
     liveModel, client, toolDefinitions, livePrompt, 12, Prompts.InvestigateV1,

@@ -74,6 +74,14 @@ public class Log
             : $"Tools called ({toolsCalled.Count}): {string.Join("; ", toolsCalled)}");
     }
 
+    public static void Measured(IReadOnlyList<string> lines)
+    {
+        foreach (var line in lines)
+        {
+            Console.WriteLine(line);
+        }
+    }
+
     public static void Nudge(int number, int max, string missing)
     {
         Console.WriteLine($"Nudge {number}/{max}: answer not accepted yet. {missing}");

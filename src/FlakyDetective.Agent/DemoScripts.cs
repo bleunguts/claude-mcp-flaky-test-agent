@@ -131,6 +131,50 @@ public static class DemoScripts
     ]);
 }
 
+// Guardrail 2 test helpers. These scripts are used with InvestigationMethod.NextMissingStep.
+public static class GuardrailScripts
+{
+    // Answers at once, is nudged, then does the whole method with n=1 (fast) and answers again.
+    // Expect one nudge and a clean finish.
+    public static ScriptedModel AnswersEarlyThenCompletes() => new ScriptedModel([
+        messages => Script.Finish("I think the test is stable."),
+        messages => Script.CallTool("call_1", "run_test_n_times", new Dictionary<string, object?> { { "n", 1 } }),
+        messages => Script.CallTool("call_2", "run_test_n_times", new Dictionary<string, object?> { { "n", 1 }, { "testFilter", "Mid_is_positive" } }),
+        messages => Script.CallTool("call_3", "find_test_source", new Dictionary<string, object?> { { "testName", "Mid_is_positive" } }),
+        messages => Script.CallTool("call_4", "read_source", new Dictionary<string, object?>
+        {
+            { "path", "sandbox/FlakyLab/FlakyLabTests.cs" }, { "startLine", 62 }, { "endLine", 67 }
+        }),
+        messages => Script.Finish("The method is finished."),
+    ]);
+
+    // Cites a tool it never called and quotes a result that does not exist. With no required steps set,
+    // the loop accepts the answer and reports UNGROUNDED lines (guardrail 3, report only).
+    public static ScriptedModel InventedEvidence() => new ScriptedModel([
+        messages => Script.CallTool("call_1", "ping", []),
+        messages => Script.Finish(
+            "Test: Mid_is_positive\n" +
+            "Verdict: flaky\n" +
+            "Evidence:\n" +
+            "- read_source: {\"path\":\"sandbox/FlakyLab/FlakyLabTests.cs\",\"text\":\"[Fact] public void Mid_is_positive()\"}\n" +
+            "- ping: {\"result\":\"not what the tool said\"}\n" +
+            "Confidence: low"),
+    ]);
+
+    // Never does any step and answers every time. The nudge limit is reached and the run is flagged INCOMPLETE.
+    public static IModel Stubborn() => new StubbornModel();
+}
+
+// Answers immediately on every call, however often it is nudged.
+public class StubbornModel : IModel
+{
+    public Task<ModelResponse> CompleteAsync(List<Message> messages, IReadOnlyList<ToolDefinition> tools, string? systemPrompt = null, CancellationToken cancellationToken = default)
+    {
+        Console.WriteLine("StubbornModel: answering without doing anything");
+        return Task.FromResult(Script.Finish("I am done."));
+    }
+}
+
 // Asks for ping on every call, with a fresh id each time.
 public class RunawayModel : IModel
 {

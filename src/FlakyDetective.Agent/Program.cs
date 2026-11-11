@@ -256,7 +256,9 @@ var liveModel = new OllamaModel(liveHttp, "qwen2.5:3b", 8192);
 // string livePrompt = "Use the ping tool and tell me what it returned.";
 string livePrompt = "Investigate the test Mid_is_positive.";
 
-var liveResult = await AgentLoop.RunLoopAsync(liveModel, client, toolDefinitions, livePrompt, 12, Prompts.InvestigateV1);
+var liveResult = await AgentLoop.RunLoopAsync(
+    liveModel, client, toolDefinitions, livePrompt, 12, Prompts.InvestigateV1,
+    nextMissingStep: InvestigationMethod.NextMissingStep);
 Console.WriteLine($"Final result: {liveResult}");
 #endregion
 
@@ -280,7 +282,9 @@ var claudeModel = new AnthropicModel(new Anthropic.AnthropicClient());
 
 string claudePrompt = "Find and read the Reset_clears_cache test";
 
-var claudeResult = await AgentLoop.RunLoopAsync(claudeModel, client, toolDefinitions, claudePrompt, 12, Prompts.InvestigateV1);
+var claudeResult = await AgentLoop.RunLoopAsync(
+    claudeModel, client, toolDefinitions, claudePrompt, 12, Prompts.InvestigateV1,
+    nextMissingStep: InvestigationMethod.NextMissingStep);
 Console.WriteLine($"Final result: {claudeResult}");
 */
 #endregion
@@ -289,17 +293,43 @@ Console.WriteLine($"Final result: {claudeResult}");
 // WHAT:     Runs the loop against scripted models that misbehave in the way the real model does,
 //           to check that each guardrail holds. No LLM is involved, so the result is deterministic.
 // RUN IT:   Remove the /* */. Needs client and toolDefinitions (region 1).
-// WHY:      Five live runs showed the model skips steps, makes parallel tool calls and answers
-//           from one or two measurements however the prompt is worded. Things code can enforce,
-//           code should enforce.
-// EXPECTED: TwoToolsAtOnce  guardrail 1, one tool per turn
+// WHY:      Live runs showed the model skips steps, makes parallel tool calls, answers from one or two
+//           measurements however the prompt is worded, and writes evidence it never received. Things
+//           code can enforce, code should enforce.
+// EXPECTED: TwoToolsAtOnce          guardrail 1, one tool per turn
 //             ping runs; find_test_source gets a "Skipped" error result and is not executed.
 //             Tools called (2): ping(); find_test_source(testName=Reset_clears_cache) [skipped]
+//           AnswersEarlyThenCompletes  guardrail 2, no answer before the method is done
+//             "Nudge 1/3 ..." after the early answer, then four tool calls, then a clean finish.
+//           Stubborn                guardrail 2, the nudge limit
+//             Nudge 1/3, 2/3, 3/3, then "INCOMPLETE: the method was not finished ..." and Incomplete = True.
+//           InventedEvidence        guardrail 3, grounding check (report only)
+//             "UNGROUNDED: the answer cites read_source, which was never called" and
+//             "UNGROUNDED: the evidence quoted for ping does not appear in any of its real results".
 // LESSON:   A skipped tool_use still needs a tool_result, because the API pairs every request with a
-//           result. The skipped call stays in the history; only its execution is refused.
+//           result. The skipped call stays in the history; only its execution is refused. A nudge is just
+//           a user message after the assistant's answer, so roles still alternate. The grounding check
+//           only reports: it cannot tell a lie from a clumsy quote, so a human reads the flags.
 /*
 Console.WriteLine("===================================================================== guardrail 1: one tool per turn");
 var guardrailResult = await AgentLoop.RunLoopAsync(DemoScripts.TwoToolsAtOnce(), client, toolDefinitions, "Investigate the test Reset_clears_cache.", 5);
+Console.WriteLine($"Final result: {guardrailResult}");
+
+Console.WriteLine("===================================================================== guardrail 2: no answer before the method is done");
+guardrailResult = await AgentLoop.RunLoopAsync(
+    GuardrailScripts.AnswersEarlyThenCompletes(), client, toolDefinitions, "Investigate the test Mid_is_positive.", 12,
+    nextMissingStep: InvestigationMethod.NextMissingStep);
+Console.WriteLine($"Final result: {guardrailResult}");
+
+Console.WriteLine("===================================================================== guardrail 2: the nudge limit");
+guardrailResult = await AgentLoop.RunLoopAsync(
+    GuardrailScripts.Stubborn(), client, toolDefinitions, "Investigate the test Mid_is_positive.", 12,
+    nextMissingStep: InvestigationMethod.NextMissingStep);
+Console.WriteLine($"Final result: {guardrailResult}");
+
+Console.WriteLine("===================================================================== guardrail 3: ungrounded evidence");
+guardrailResult = await AgentLoop.RunLoopAsync(
+    GuardrailScripts.InventedEvidence(), client, toolDefinitions, "Investigate the test Mid_is_positive.", 5);
 Console.WriteLine($"Final result: {guardrailResult}");
 */
 #endregion

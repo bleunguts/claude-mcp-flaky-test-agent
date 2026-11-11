@@ -197,3 +197,21 @@ Known limitations:
 - Not run against the real API, so anything the API validates beyond the shape (model access, token limits) is untested.
 - Server-side refusal `fallbacks` (recommended for this model) are not used; they need the beta endpoint and a second set of types.
 - Responses are not streamed and prompt caching is not used.
+
+## Session 5: loop guardrails (in progress)
+
+Live runs with a small local model (`qwen2.5:3b`) showed that prompt wording alone cannot make it follow a multi-step method. Across the runs it made parallel tool calls, skipped the suite run and the source read, answered from one or two measurements, attached other tests' numbers to the test it was asked about, and once invented tool results that never happened. Things code can enforce, code enforces: the loop now holds three guardrails, all checked with scripted models (no LLM) in region 9 of `Program.cs`.
+
+1. **One tool per turn.** Only the first `tool_use` in a reply runs. Every other one still gets a `tool_result` (the API requires one per request), marked as an error telling the model to call it again after it has seen the first result.
+2. **No answer before the method is done.** `InvestigationMethod.NextMissingStep` names the first required step still missing: a whole-suite run, a single-test run, `find_test_source`, `read_source`. If the model answers early, the loop does not accept it. It adds a short user message naming the missing step and carries on, up to a nudge limit (default three) and the iteration cap. A run that gives up is printed as `INCOMPLETE` and flagged in the result, so it cannot pass as clean.
+3. **A grounding check, report only.** After the answer, `Grounding.Check` looks for a tool cited in the evidence that was never called, and for quoted JSON that does not appear in any real result of that tool. It prints `UNGROUNDED` lines. It does not block, because it cannot tell a lie from a clumsy quote; a human reads the flags when scoring.
+
+Alongside this, `run_test_n_times` now returns only the runs that did not pass (the summaries still count every run). A whole-suite result had been about 13 KB of mostly passing rows, and the model mixed up the rows of tests with similar names.
+
+Still to do for the session: run the six tests three times each with these guardrails on, score them by hand against the private ground truth, and record the aggregate scorecard. The guardrails make a run's process visible and checkable; they do not make the model's diagnosis correct.
+
+Known limitations:
+
+- The required steps are specific to the investigation prompt and live in code (`InvestigationMethod`), not in the prompt.
+- The grounding check compares text, so a small edit to a quote (for example `\u0027` written as `'`) is reported as a mismatch.
+- A small model can still obey every guardrail and reach a wrong verdict.

@@ -113,6 +113,11 @@ public class TestRunner
             ));
         });
 
+        // Return only the runs that did not pass. A passing row says nothing the per-test summary does
+        // not already say, and in a whole-suite result it buries the failures: with a small model the
+        // rows of different tests get mixed up. The summaries still count every run.
+        var notPassedRuns = allTrxResults.Where(r => r.Outcome != OutcomeType.Passed).ToList();
+
         if(runsCompleted < n)
         {
             return new BatchRunResult
@@ -121,7 +126,7 @@ public class TestRunner
                 Completed: runsCompleted,
                 Error: "Some runs failed to complete, the data is partial",
                 TestFilter: testFilter,
-                Runs: allTrxResults,
+                Runs: notPassedRuns,
                 TestSummaries: summaries
             );
         }
@@ -132,7 +137,7 @@ public class TestRunner
             Completed: runsCompleted,
             Error: null,
             TestFilter: testFilter,
-            Runs: allTrxResults,
+            Runs: notPassedRuns,
             TestSummaries: summaries
         );
     }

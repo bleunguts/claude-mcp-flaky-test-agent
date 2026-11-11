@@ -84,7 +84,7 @@ for i in {1..10}; do dotnet test sandbox/FlakyLab --nologo -v q | tail -1; done
 
 `FlakyDetective.McpServer` runs over stdio and logs to stderr only. It exposes two tools: `ping` (a wiring check) and `run_test_n_times(n, testFilter?)`. The second runs `dotnet test` n times in sequence, reads each `.trx` file, and returns a structured result:
 
-- `Runs`: one row per test per run, with outcome, duration in milliseconds and the error message for failures.
+- `Runs`: one row per run that did not pass, with outcome, duration in milliseconds and the error message. Passed runs are left out because the summaries already count them; in a whole-suite result they buried the failures and a small model mixed up the rows of different tests.
 - `TestSummaries`: one entry per test with runs, passed, failed and failure rate.
 - `Requested` and `Completed`, so partial data is visible.
 - `TestFilter`, where null means the whole suite, so the scope of a result is explicit. A test can behave differently alone and in the suite.

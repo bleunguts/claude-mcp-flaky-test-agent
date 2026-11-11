@@ -13,10 +13,10 @@ public class OllamaModel(HttpClient http, string modelName, int numCtx = 8192) :
         new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
 
     public async Task<ModelResponse> CompleteAsync(
-        List<Message> messages, IReadOnlyList<ToolDefinition> tools, CancellationToken cancellationToken = default)
+        List<Message> messages, IReadOnlyList<ToolDefinition> tools, string? systemPrompt = null, CancellationToken cancellationToken = default)
     {
         var request = new OllamaChatRequest(
-            modelName, ToOllamaMessages(messages), ToOllamaTools(tools), false, new OllamaOptions(numCtx));
+            modelName, ToOllamaMessages(messages, systemPrompt), ToOllamaTools(tools), false, new OllamaOptions(numCtx));
 
         HttpResponseMessage httpResponse;
         try
@@ -51,12 +51,17 @@ public class OllamaModel(HttpClient http, string modelName, int numCtx = 8192) :
             : tools.Select(t => new OllamaTool("function",
                   new OllamaFunctionDefinition(t.Name, t.Description, t.InputSchema))).ToList();
 
-    public static List<OllamaMessage> ToOllamaMessages(List<Message> history)
+    public static List<OllamaMessage> ToOllamaMessages(List<Message> history, string? systemPrompt)
     {
         // a tool result only knows the id of its request, but Ollama wants the tool's name
         var toolNames = history.SelectMany(m => m.Content).OfType<ToolUseBlock>()
                                .ToDictionary(b => b.Id, b => b.Name);
         var result = new List<OllamaMessage>();
+
+        if(!string.IsNullOrWhiteSpace(systemPrompt))
+        {
+            result.Add(new OllamaMessage("system", systemPrompt));
+        }
 
         foreach (var message in history)
         {

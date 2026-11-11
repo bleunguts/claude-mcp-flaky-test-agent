@@ -13,7 +13,8 @@ public class AgentLoop
         McpClient client,
         IReadOnlyList<ToolDefinition> tools,
         string userPrompt,
-        int maxIterations)
+        int maxIterations,
+        string? systemPrompt = null)
     {
         var messages = new List<Message>
         {
@@ -24,10 +25,11 @@ public class AgentLoop
             )
         };
 
+        var toolsCalled = new List<string>();
         for (var iteration = 1; iteration <= maxIterations; iteration++)
         {
             Log.Iteration(iteration, maxIterations);
-            var response = await model.CompleteAsync(messages, tools);
+            var response = await model.CompleteAsync(messages, tools, systemPrompt);
             messages.Add(new Message
             (
                 Role: "assistant",
@@ -40,6 +42,7 @@ public class AgentLoop
                 var message = messages.Last();
                 var text = message.Content.OfType<TextBlock>().FirstOrDefault()?.Text ?? string.Empty;
                 Log.LoopStopped(LoopStopReason.EndTurn, iteration);
+                Log.ToolsCalled(toolsCalled);
                 return new AgentResult(text, false, iteration);
             }
             var toolResults = new List<ContentBlock>();
@@ -61,18 +64,27 @@ public class AgentLoop
                     }
                     var toolResult = new ToolResultBlock(toolUse.Id, append.ToString(), toolResponse.IsError == true);
                     Log.PrintToolResult(toolResult);
-                    toolResults.Add(toolResult);                    
+                    toolResults.Add(toolResult);
+                    toolsCalled.Add(Describe(toolUse, toolResult.IsError));
                 }
                 catch (Exception exp)
                 {
                     ToolResultBlock toolResult = new(toolUse.Id, $"Tool call failed. {exp.Message}", true);
                     toolResults.Add(toolResult);
+                    toolsCalled.Add(Describe(toolUse, toolResult.IsError));
                     Log.PrintToolResult(toolResult);
                 }
             }
             messages.Add(new Message("user", toolResults));
         }
         Log.LoopStopped(LoopStopReason.MaxIterationsReached, maxIterations);
+        Log.ToolsCalled(toolsCalled);
         return new AgentResult($"Maximum iterations reached without a successful completion. {userPrompt}", true, maxIterations);
+    }
+
+    private static string Describe(ToolUseBlock toolUse, bool isError)
+    {
+        var args = string.Join(", ", toolUse.Input.Select(kv => $"{kv.Key}={kv.Value}"));
+        return $"{toolUse.Name}({args}){(isError ? " [error]" : "")}";
     }
 }

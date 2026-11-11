@@ -32,14 +32,19 @@ public class AnthropicModel : IModel
     }
 
     public async Task<ModelResponse> CompleteAsync(
-        List<Message> messages, IReadOnlyList<ToolDefinition> tools, CancellationToken cancellationToken = default)
+        List<Message> messages, IReadOnlyList<ToolDefinition> tools, string? systemPrompt = null,CancellationToken cancellationToken = default)
     {
         var request = new Sdk.MessageCreateParams
         {
             Model = _model,
             MaxTokens = _maxTokens,
-            Messages = ToSdkMessages(messages),
+            Messages = ToSdkMessages(messages),            
         };
+
+        if(systemPrompt is not null)
+        {
+            request = request with { System = systemPrompt };
+        }   
 
         if (tools.Count > 0)
         {

@@ -65,4 +65,12 @@ public class Log
         };
         Console.WriteLine(reasonText);
     }
+
+    // What the agent really called, in order. Compare every claim in the final answer with this line.
+    public static void ToolsCalled(IReadOnlyList<string> toolsCalled)
+    {
+        Console.WriteLine(toolsCalled.Count == 0
+            ? "Tools called: none"
+            : $"Tools called ({toolsCalled.Count}): {string.Join("; ", toolsCalled)}");
+    }
 }

@@ -42,6 +42,7 @@ public class AgentLoop
                 var message = messages.Last();
                 var text = message.Content.OfType<TextBlock>().FirstOrDefault()?.Text ?? string.Empty;
                 Log.LoopStopped(LoopStopReason.EndTurn, iteration);
+                Log.ToolsCalled(toolsCalled);
                 return new AgentResult(text, false, iteration);
             }
             var toolResults = new List<ContentBlock>();
@@ -77,11 +78,13 @@ public class AgentLoop
             messages.Add(new Message("user", toolResults));
         }
         Log.LoopStopped(LoopStopReason.MaxIterationsReached, maxIterations);
+        Log.ToolsCalled(toolsCalled);
         return new AgentResult($"Maximum iterations reached without a successful completion. {userPrompt}", true, maxIterations);
     }
 
     private static string Describe(ToolUseBlock toolUse, bool isError)
     {
-        throw new NotImplementedException();
+        var args = string.Join(", ", toolUse.Input.Select(kv => $"{kv.Key}={kv.Value}"));
+        return $"{toolUse.Name}({args}){(isError ? " [error]" : "")}";
     }
 }

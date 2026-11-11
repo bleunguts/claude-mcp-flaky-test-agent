@@ -109,6 +109,26 @@ public static class DemoScripts
 
     // Never finishes. The loop's iteration cap is the only thing that stops it.
     public static IModel Runaway() => new RunawayModel();
+
+    // Asks for two tools in a single reply, as the small model keeps doing. Guardrail 1 should run
+    // only the first (ping) and answer the second with a "skipped" error result.
+    public static ScriptedModel TwoToolsAtOnce() => new ScriptedModel([
+        messages =>
+        {
+            Console.WriteLine("Step 1: two tool calls in one reply");
+            return new ModelResponse(
+                [
+                    new ToolUseBlock("call_1", "ping", new Dictionary<string, object?>()),
+                    new ToolUseBlock("call_2", "find_test_source", new Dictionary<string, object?> { { "testName", "Reset_clears_cache" } }),
+                ],
+                StopReason.ToolUse);
+        },
+        messages =>
+        {
+            Console.WriteLine("Step 2: Finish");
+            return Script.Finish("Done!");
+        }
+    ]);
 }
 
 // Asks for ping on every call, with a fresh id each time.

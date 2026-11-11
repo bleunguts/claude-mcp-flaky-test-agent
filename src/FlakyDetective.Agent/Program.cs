@@ -285,4 +285,23 @@ Console.WriteLine($"Final result: {claudeResult}");
 */
 #endregion
 
+#region 9. Loop guardrails: enforcing the method in code, not in the prompt (issue #29)
+// WHAT:     Runs the loop against scripted models that misbehave in the way the real model does,
+//           to check that each guardrail holds. No LLM is involved, so the result is deterministic.
+// RUN IT:   Remove the /* */. Needs client and toolDefinitions (region 1).
+// WHY:      Five live runs showed the model skips steps, makes parallel tool calls and answers
+//           from one or two measurements however the prompt is worded. Things code can enforce,
+//           code should enforce.
+// EXPECTED: TwoToolsAtOnce  guardrail 1, one tool per turn
+//             ping runs; find_test_source gets a "Skipped" error result and is not executed.
+//             Tools called (2): ping(); find_test_source(testName=Reset_clears_cache) [skipped]
+// LESSON:   A skipped tool_use still needs a tool_result, because the API pairs every request with a
+//           result. The skipped call stays in the history; only its execution is refused.
+/*
+Console.WriteLine("===================================================================== guardrail 1: one tool per turn");
+var guardrailResult = await AgentLoop.RunLoopAsync(DemoScripts.TwoToolsAtOnce(), client, toolDefinitions, "Investigate the test Reset_clears_cache.", 5);
+Console.WriteLine($"Final result: {guardrailResult}");
+*/
+#endregion
+
 

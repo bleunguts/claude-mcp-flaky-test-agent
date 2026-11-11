@@ -8,6 +8,9 @@ public record AgentResult(string Text, bool HitIterationCap, int Iterations);
 
 public class AgentLoop
 {
+    private const string SkippedMessage =
+        "Skipped: call one tool at a time. Call this tool again after you have seen the result of the previous call.";
+
     public static async Task<AgentResult> RunLoopAsync(
         IModel model,
         McpClient client,
@@ -46,8 +49,23 @@ public class AgentLoop
                 return new AgentResult(text, false, iteration);
             }
             var toolResults = new List<ContentBlock>();
+            var firstToolCall = true;
             foreach (var toolUse in response.Content.OfType<ToolUseBlock>())
             {
+                // Guardrail 1: one tool per turn. The prompt asks for this and the model ignores it,
+                // so the loop enforces it. Only the first call in a reply runs. Every other call still
+                // gets a tool_result, because the API needs one for every tool_use, but it is an error
+                // that tells the model to call it again once it has seen the first result.
+                if (!firstToolCall)
+                {
+                    var skipped = new ToolResultBlock(toolUse.Id, SkippedMessage, true);
+                    toolResults.Add(skipped);
+                    toolsCalled.Add($"{Describe(toolUse, false)} [skipped]");
+                    Log.PrintToolResult(skipped);
+                    continue;
+                }
+                firstToolCall = false;
+
                 try
                 {
                     var tool = tools.FirstOrDefault(t => t.Name == toolUse.Name);

@@ -36,6 +36,8 @@ public static class Prompts
     // V1: adds "plain test name as filter", "an error means no data" and an "unknown" verdict.
     // Stops the invented filter. The model still skips steps and answers after one or two tool
     // calls, and the behaviour varies between identical runs.
+    // In four runs on this prompt the model made one or two measurements and answered; it never completed all four steps,
+    // and it invented or miscounted the figures it had not measured.
     public const string InvestigateV1 = """
     You investigate flaky tests in a .NET project using the tools provided.
 

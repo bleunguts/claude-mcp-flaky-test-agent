@@ -1,6 +1,6 @@
 # Roadmap
 
-A step-by-step build of an MCP server and a hand-written agentic loop that investigates flaky tests, proposes and verifies fixes, and raises pull requests. The project doubles as a guided tour of agentic architecture: the tool producer (MCP server), the tool orchestrator (the loop), and the guardrails around them are each built in the open, one small session at a time.
+A step-by-step build of an MCP server and a hand-written agentic loop that investigates flaky tests, and proposes fixes that it verifies, leaving any pull request to a human. The project doubles as a guided tour of agentic architecture: the tool producer (MCP server), the tool orchestrator (the loop), and the guardrails around them are each built in the open, one small session at a time.
 
 **Status:** Sessions 1 to 5 complete, Session 6 next.
 
@@ -13,7 +13,7 @@ A step-by-step build of an MCP server and a hand-written agentic loop that inves
 | 3 | Code analyzer tools (`read_source`, `find_test_source`) | No | Done |
 | 4 | Hand-coded agentic loop: MCP client + loop, driven by a scripted stub model | No | Done |
 | 5 | Investigation prompt + first diagnoses, scored against ground truth (local Ollama model) ([#23](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/23)) | No | Done |
-| 6 | Fix → verify 10x → git branch/PR tools ([#35](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/35)) | No (local model) | Planned |
+| 6 | Propose a fix → verify with 20 runs (`edit_source`, `Verification`); no PR tool ([#35](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/35)) | No (local model) | Planned |
 | 7 | Notifier, guardrails review, audit log, final scorecard ([#36](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/36)) | No | Planned |
 | 8 | Optional: CI candidates, `get_flaky_candidates` from a local history folder, then GitHub Actions ([#34](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/34)) | No | Optional |
 
@@ -36,7 +36,7 @@ Sessions are small and cover one topic each. Every change follows the same path:
 │                         ▼                                                  │
 │  src/FlakyDetective.McpServer  (tool PRODUCER)                             │
 │   [McpServerTool] run_test_n_times · read_source · find_test_source ·      │
-│   git_branch_commit_pr · notify · (optional) get_flaky_candidates          │
+│   edit_source · notify · (optional) get_flaky_candidates                    │
 │        │                 │                                                 │
 │        ▼                 ▼                                                 │
 │   CI history        sandbox/FlakyLab (deliberately flaky NUnit tests)      │

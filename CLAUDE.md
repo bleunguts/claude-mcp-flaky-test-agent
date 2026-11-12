@@ -2,7 +2,7 @@
 
 ## What this is
 A C#/.NET agent that hunts down flaky tests. It's built from two parts:
-> an MCP server (the tool **producer**) and a hand-coded agentic loop that consumes it as an MCP client (the tool **orchestrator**). Together they investigate flaky tests, propose and verify fixes, and raise PRs.
+> an MCP server (the tool **producer**) and a hand-coded agentic loop that consumes it as an MCP client (the tool **orchestrator**). Together they investigate flaky tests and propose fixes that they verify. A human decides what happens to a fix; the agent raises no PRs.
 
 The aim is to understand agentic architecture from the inside, not just drive AI tools. Favour clear, explicit code whose design I can walk someone through in person over clever abstractions.
 
@@ -18,7 +18,7 @@ src/FlakyDetective.Agent      -> tool ORCHESTRATOR: Anthropic C# SDK (Messages A
 src/FlakyDetective.McpServer  -> tool PRODUCER: ModelContextProtocol C# SDK, stdio transport, [McpServerTool] handlers
 sandbox/FlakyLab              -> NUnit project with deliberately flaky tests: the "crime scene"
 ```
-MCP tools: `run_test_n_times`, `read_source` and `find_test_source` exist; `git_branch_commit_pr` (Session 6) and `notify` (Session 7) are planned; `get_flaky_candidates` (CI history) is optional, Session 8.
+MCP tools: `run_test_n_times`, `read_source` and `find_test_source` exist, as does `edit_source` (sandbox-only, dry-run by default); `notify` (Session 7) is planned; `get_flaky_candidates` (CI history) is optional, Session 8.
 
 ## Hard rules
 - **Hand-code the loop.** Handle `tool_use` → MCP `CallToolAsync` → `tool_result` → repeat until `end_turn`. A real model adapter uses `client.Messages.Create`. Do NOT use `IChatClient` + `UseFunctionInvocation()`, because that automates the exact thing I need to demonstrate. The loop runs behind the `IModel` interface: a scripted stub, a local Ollama model (live in region 7 of `Program.cs`), or Claude through the Anthropic SDK (`AnthropicModel`, which uses `client.Messages.Create`; region 8, commented out). The message types mirror the Anthropic Messages API.

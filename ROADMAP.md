@@ -154,6 +154,7 @@ Things learned while building it:
 - `done_reason` is `"stop"` even when the model asks for a tool, so the stop reason is decided by whether the reply contains tool calls, not by `done_reason`.
 - Ollama's default context window is small, so `num_ctx` is set explicitly (8192) to stop the prompt being silently truncated.
 - Arguments from the model arrive as JSON values and are passed on to `CallToolAsync` unchanged.
+- A reply is capped at 800 tokens (`num_predict`). One run hit the 300-second HTTP timeout, which at about 9 tokens a second means the model wrote thousands of tokens, most likely stuck repeating itself. The cap bounds a stuck reply to about a minute and a half, and a reply cut off by it has no `Verdict:` line, so the loop's answer check nudges it.
 
 Usage:
 
@@ -203,7 +204,7 @@ Known limitations:
 Live runs with a small local model (`qwen2.5:3b`) showed that prompt wording alone cannot make it follow a multi-step method. Across the runs it made parallel tool calls, skipped the suite run and the source read, answered from one or two measurements, attached other tests' numbers to the test it was asked about, and once invented tool results that never happened. Things code can enforce, code enforces: the loop now holds three guardrails and a measurement report, all checked with scripted models (no LLM) in region 9 of `Program.cs`.
 
 1. **One tool per turn.** Only the first `tool_use` in a reply runs. Every other one still gets a `tool_result` (the API requires one per request), marked as an error telling the model to call it again after it has seen the first result.
-2. **No answer before the method is done.** `InvestigationMethod.NextMissingStep` names the first required step still missing: a whole-suite run, a single-test run, `find_test_source`, `read_source`. A step counts only if a call to that tool worked: a `read_source` that came back "file not found" does not count, and the nudge says so, so a guessed path cannot satisfy the method. The answer must also contain a `Verdict:` line (`InvestigationMethod.AnswerProblem`), because a run once ended with "I will run it again". If the model answers early or in the wrong shape, the loop does not accept it. It adds a short user message saying what is missing and carries on, up to a nudge limit (default three) and the iteration cap. A run that gives up is printed as `INCOMPLETE` and flagged in the result, so it cannot pass as clean.
+2. **No answer before the method is done.** `InvestigationMethod.NextMissingStep` names the first required step still missing: a whole-suite run, a single-test run, `find_test_source`, `read_source`. A step counts only if a call to that tool worked: a `read_source` that came back "file not found" does not count, and the nudge says so, so a guessed path cannot satisfy the method. The retry nudge quotes the exact path and lines `find_test_source` returned, because "use what it returned" was ignored (a model copied `endLine` 89 as 9 three times). The answer must also contain a `Verdict:` line (`InvestigationMethod.AnswerProblem`), because a run once ended with "I will run it again". If the model answers early or in the wrong shape, the loop does not accept it. It adds a short user message saying what is missing and carries on, up to a nudge limit (default three) and the iteration cap. A run that gives up is printed as `INCOMPLETE` and flagged in the result, so it cannot pass as clean.
 3. **A grounding check, report only.** After the answer, `Grounding.Check` looks for a tool cited in the evidence that was never called, for quoted JSON that does not appear in any real result of that tool, and for failed runs listed in the answer that no tool reported (the model once copied other tests' failed rows out of a suite result and relabelled them as the test it was asked about). It prints `UNGROUNDED` lines. It does not block, because it cannot tell a lie from a clumsy quote; a human reads the flags when scoring.
 4. **A `MEASURED` line.** The grounding check cannot see wrong numbers in plain prose, and the first live runs showed exactly that: the model correctly says a test passes alone and fails in the suite, then swaps the two failure rates. So the loop reads the structured `run_test_n_times` results and prints what was really measured, for example `MEASURED Reset_clears_cache: alone 0/10 failed; in the suite 6/10 failed`. A person scoring a run compares the model's `Failure rate` line with it.
 
@@ -216,3 +217,25 @@ Known limitations:
 - The required steps are specific to the investigation prompt and live in code (`InvestigationMethod`), not in the prompt.
 - The grounding check compares text, so a small edit to a quote (for example `\u0027` written as `'`) is reported as a mismatch.
 - A small model can still obey every guardrail and reach a wrong verdict.
+
+## Session 5: pilot scorecard (aggregate only)
+
+The first scored batch: six runs on `qwen2.5:3b` with the guardrails on and prompt `InvestigateV1`, three on the stable control `Mid_is_positive` and three on the flaky `Reset_clears_cache`. Each run is scored on five questions, one point each: did it finish the method, is the verdict right, do its stated failure rates match what the tools measured (the `MEASURED` line), is its evidence traceable to real tool results, and does its stated cause match the private answer key (worth up to 2: 2 names the mechanism, 1 points at the right area, 0 is none or wrong). The maximum is 4 for the control and 6 for a flaky test. The causes themselves are not recorded here.
+
+| Question | Result (6 runs) |
+|---|---|
+| Method finished | 4 / 6 (one crash on an Ollama timeout, one flagged `INCOMPLETE`) |
+| Verdict right | 3 / 6 |
+| Failure rates match `MEASURED` | 1 / 6 |
+| Evidence traceable | 3 / 6 |
+| Cause stated, flaky test | 1 / 3 runs, partly right; none matched the key |
+| **Score** | **12 / 30** |
+
+An earlier batch with older code (three runs on the flaky test, before the `MEASURED` line and the answer checks): verdict right 3 / 3, failure rates right 0 / 3, a cause stated in 3 / 3, all partly right, none matching.
+
+What it shows:
+
+- The guardrails fixed the process. Before them, none of the first seven runs completed the four-step method; now nearly all do, and the ones that do not are flagged.
+- They did not fix the content. The model still misstates the figures it was given, and it never named the mechanism behind the flakiness in any run.
+- Three runs per test is too few to rank anything: the same prompt got the flaky test's verdict right three times out of three in one batch and once out of three in the next.
+- Prompt `InvestigateV2` (answer only about the named test, copy numbers digit for digit, report the two rates separately) is in place but not yet scored.

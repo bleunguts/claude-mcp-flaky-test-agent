@@ -46,8 +46,33 @@ public static class InvestigationMethod
             "Next call find_test_source with the test name.",
             "Your find_test_source call failed. Call it again with the exact test name.")
         ?? Step(calls, "read_source", _ => true,
-            "Next call read_source with the file and line range that find_test_source returned.",
-            "Your read_source call failed. Call it again with exactly the file and line range that find_test_source returned. Do not guess a path.");
+            $"Next call read_source with {ReadArguments(calls)}.",
+            $"Your read_source call failed. Call it again with {ReadArguments(calls)}. Copy the numbers digit for digit and do not guess a path.");
+
+    // The arguments for read_source, taken from the latest find_test_source that worked, so the nudge can quote
+    // them. A retry that only says "use what find_test_source returned" was ignored: a model copied endLine 89
+    // as 9 three times. These are values a tool returned, not an answer, so nothing is given away.
+    private static string ReadArguments(IReadOnlyList<ToolExecution> calls)
+    {
+        const string fallback = "exactly the file and line range that find_test_source returned";
+
+        var find = calls.LastOrDefault(c => c.Name == "find_test_source" && c.Succeeded);
+        if (find == null)
+        {
+            return fallback;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(find.Result);
+            var match = document.RootElement.GetProperty("matches")[0];
+            return $"path \"{match.GetProperty("file").GetString()}\", startLine {match.GetProperty("startLine").GetInt32()}, endLine {match.GetProperty("endLine").GetInt32()}";
+        }
+        catch (Exception ex) when (ex is JsonException or KeyNotFoundException or InvalidOperationException or IndexOutOfRangeException)
+        {
+            return fallback;
+        }
+    }
 
     // Guardrail 2, the answer itself. The prompt asks for a fixed format and the scorecard depends on it. Some
     // runs ended with a sentence like "I will run it again", which is not an answer. Returns null when the

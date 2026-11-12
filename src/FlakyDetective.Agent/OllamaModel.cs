@@ -7,7 +7,10 @@ using System.Text.Json.Serialization;
 
 namespace FlakyDetective.Agent;
 
-public class OllamaModel(HttpClient http, string modelName, int numCtx = 8192) : IModel
+// maxOutputTokens: the longest reply the model may write. The answer format needs about 250 tokens; 800 is
+// generous, and bounds a stuck generation to about a minute and a half at 9 tokens a second. A reply cut off
+// by the cap has no complete answer, so the loop's answer check nudges it.
+public class OllamaModel(HttpClient http, string modelName, int numCtx = 8192, int maxOutputTokens = 800) : IModel
 {
     private static readonly JsonSerializerOptions JsonOptions =
         new() { DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull };
@@ -16,7 +19,7 @@ public class OllamaModel(HttpClient http, string modelName, int numCtx = 8192) :
         List<Message> messages, IReadOnlyList<ToolDefinition> tools, string? systemPrompt = null, CancellationToken cancellationToken = default)
     {
         var request = new OllamaChatRequest(
-            modelName, ToOllamaMessages(messages, systemPrompt), ToOllamaTools(tools), false, new OllamaOptions(numCtx));
+            modelName, ToOllamaMessages(messages, systemPrompt), ToOllamaTools(tools), false, new OllamaOptions(numCtx, maxOutputTokens));
 
         HttpResponseMessage httpResponse;
         try

@@ -260,7 +260,7 @@ string livePrompt = args.Length > 0 ? string.Join(" ", args) : "Investigate the 
 Console.WriteLine($"Prompt: {livePrompt}");
 
 var liveResult = await AgentLoop.RunLoopAsync(
-    liveModel, client, toolDefinitions, livePrompt, 12, Prompts.InvestigateV1,
+    liveModel, client, toolDefinitions, livePrompt, 12, Prompts.InvestigateV2,
     nextMissingStep: InvestigationMethod.NextMissingStep,
     answerProblem: InvestigationMethod.AnswerProblem);
 Console.WriteLine($"Final result: {liveResult}");
@@ -287,7 +287,7 @@ var claudeModel = new AnthropicModel(new Anthropic.AnthropicClient());
 string claudePrompt = "Find and read the Reset_clears_cache test";
 
 var claudeResult = await AgentLoop.RunLoopAsync(
-    claudeModel, client, toolDefinitions, claudePrompt, 12, Prompts.InvestigateV1,
+    claudeModel, client, toolDefinitions, claudePrompt, 12, Prompts.InvestigateV2,
     nextMissingStep: InvestigationMethod.NextMissingStep,
     answerProblem: InvestigationMethod.AnswerProblem);
 Console.WriteLine($"Final result: {claudeResult}");

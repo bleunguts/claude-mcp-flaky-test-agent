@@ -240,4 +240,24 @@ What it shows:
 - The guardrails fixed the process. Before them, none of the first seven runs completed the four-step method; now nearly all do, and the ones that do not are flagged.
 - They did not fix the content. The model still misstates the figures it was given, and it never named the mechanism behind the flakiness in any run.
 - Three runs per test is too few to rank anything: the same prompt got the flaky test's verdict right three times out of three in one batch and once out of three in the next.
-- Prompt `InvestigateV2` (answer only about the named test, copy numbers digit for digit, report the two rates separately) is in place but not yet scored.
+### Prompt V2 batch (10 runs)
+
+Prompt `InvestigateV2` (answer only about the named test, copy numbers digit for digit, report the two rates separately), run five times on the stable control and five times on the flaky test, with the 800-token reply cap and the retry nudge that quotes the exact read arguments. Same rubric.
+
+| Question | V1 batch (6 runs) | V2 batch (10 runs) |
+|---|---|---|
+| Method finished | 4 / 6 | 10 / 10 |
+| Verdict right | 3 / 6 | 6 / 10 (flaky test 5/5, control 1/5) |
+| Both stated failure rates match `MEASURED` | 1 / 6 | 2 / 10 (suite rate on the flaky test 5/5, single-test rate 0/5) |
+| Evidence traceable | 3 / 6 | 5 / 10 |
+| Cause stated, flaky test | 1 / 3, partly right | 1 / 5, partly right; none matched the key |
+| **Score** | **12 / 30 (40%)** | **24 / 50 (48%)** |
+
+What it shows:
+
+- **Reliability improved.** Every run finished the method and none timed out. In several runs the model wrote up to 25 tool calls in a single reply, many with template placeholders such as `${testSourceFile}`; the one-tool-per-turn guardrail ran only the first of each, and the reply cap bounds how long such a reply can get.
+- **The model now reads the suite figure correctly but invents the single-test figure.** It gave the right whole-suite failure count for the flaky test in 5 of 5 runs and the right single-test count in none.
+- **The stable control got worse.** Four of the five control runs said "flaky", against none of the two valid control runs under V1. Five runs is still a small sample, so this suggests a regression more than it proves one. In one run the verdict said flaky while the stated rates were 0/10 and 0/10.
+- **The cause was still never found.** One run mentioned race conditions in the suite; none gave the cause the key describes.
+
+What this points to: the model is poor at reporting numbers and at turning them into a verdict, which are exactly the parts code can do. The next improvements to try are a check that flags a verdict contradicted by the measured numbers, and letting the loop state the measured rates itself instead of asking the model to copy them. Both are small and deterministic.

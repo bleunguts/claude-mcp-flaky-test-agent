@@ -260,9 +260,10 @@ string livePrompt = args.Length > 0 ? string.Join(" ", args) : "Investigate the 
 Console.WriteLine($"Prompt: {livePrompt}");
 
 var liveResult = await AgentLoop.RunLoopAsync(
-    liveModel, client, toolDefinitions, livePrompt, 12, Prompts.InvestigateV2,
+    liveModel, client, toolDefinitions, livePrompt, 12, Prompts.InvestigateV3,
     nextMissingStep: InvestigationMethod.NextMissingStep,
-    answerProblem: InvestigationMethod.AnswerProblem);
+    answerProblem: InvestigationMethod.AnswerProblem,
+    stateMeasuredRates: true);   // V3 does not ask the model for rates: the loop appends what the tools measured
 Console.WriteLine($"Final result: {liveResult}");
 #endregion
 
@@ -287,9 +288,10 @@ var claudeModel = new AnthropicModel(new Anthropic.AnthropicClient());
 string claudePrompt = "Find and read the Reset_clears_cache test";
 
 var claudeResult = await AgentLoop.RunLoopAsync(
-    claudeModel, client, toolDefinitions, claudePrompt, 12, Prompts.InvestigateV2,
+    claudeModel, client, toolDefinitions, claudePrompt, 12, Prompts.InvestigateV3,
     nextMissingStep: InvestigationMethod.NextMissingStep,
-    answerProblem: InvestigationMethod.AnswerProblem);
+    answerProblem: InvestigationMethod.AnswerProblem,
+    stateMeasuredRates: true);
 Console.WriteLine($"Final result: {claudeResult}");
 */
 #endregion
@@ -319,6 +321,12 @@ Console.WriteLine($"Final result: {claudeResult}");
 //           RelabelledFailure       guardrail 3, failed runs listed in the answer must exist
 //             "UNGROUNDED: the answer lists failed run(s) of Mid_is_positive (run 1) that no tool reported"
 //             (a small model copied other tests' failed rows out of a suite result and relabelled them).
+//           VerdictContradictsMeasured  check 4, the verdict must agree with the measurements (report only)
+//             "INCONSISTENT: the verdict says flaky, but the tools measured no failures of Mid_is_positive
+//             (alone 0/1 failed; in the suite 0/1 failed)".
+//           StateMeasuredRates      the loop states the measured figures itself
+//             The final text ends with "Measured by the tools:" and the figures, so a wrong figure written
+//             by the model is never the last word. Used with prompt V3, which does not ask for rates.
 // LESSON:   A skipped tool_use still needs a tool_result, because the API pairs every request with a
 //           result. The skipped call stays in the history; only its execution is refused. A nudge is just
 //           a user message after the assistant's answer, so roles still alternate. The grounding check
@@ -362,6 +370,17 @@ Console.WriteLine($"Final result: {guardrailResult}");
 Console.WriteLine("===================================================================== guardrail 3: relabelled failures");
 guardrailResult = await AgentLoop.RunLoopAsync(
     GuardrailScripts.RelabelledFailure(), client, toolDefinitions, "Investigate the test Mid_is_positive.", 5);
+Console.WriteLine($"Final result: {guardrailResult}");
+
+Console.WriteLine("===================================================================== check 4: verdict against the measurements");
+guardrailResult = await AgentLoop.RunLoopAsync(
+    GuardrailScripts.VerdictContradictsMeasured(), client, toolDefinitions, "Investigate the test Mid_is_positive.", 5);
+Console.WriteLine($"Final result: {guardrailResult}");
+
+Console.WriteLine("===================================================================== the loop states the measured rates");
+guardrailResult = await AgentLoop.RunLoopAsync(
+    GuardrailScripts.VerdictContradictsMeasured(), client, toolDefinitions, "Investigate the test Mid_is_positive.", 5,
+    stateMeasuredRates: true);
 Console.WriteLine($"Final result: {guardrailResult}");
 */
 #endregion

@@ -36,7 +36,7 @@ foreach ($test in $Tests) {
         # wrapping stderr lines as errors
         cmd /c "dotnet run --project src/FlakyDetective.Agent --no-build -- ""$prompt"" > ""$file"" 2>&1"
 
-        Select-String -Path $file -Pattern '^(Nudge|Stopped|Tools called|MEASURED|INCOMPLETE|UNGROUNDED|Verdict:|Failure rate:|Unhandled)' |
+        Select-String -Path $file -Pattern '^(Nudge|Stopped|Tools called|MEASURED|INCOMPLETE|UNGROUNDED|INCONSISTENT|Verdict:|Failure rate:|Unhandled)' |
             ForEach-Object { $_.Line.Trim() } |
             Select-Object -Unique |
             ForEach-Object { "  $_" }

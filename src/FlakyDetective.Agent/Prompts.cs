@@ -99,4 +99,35 @@ public static class Prompts
     Evidence: quoted lines or numbers from the tool results
     Confidence: low, medium or high
     """;
+
+    // V3: V2 without the failure rates. In the V2 batch the model read the whole-suite figure correctly and
+    // invented the single-test figure every time, so the rates are no longer its job: the loop adds the figures
+    // the tools measured to the end of the answer (AgentLoop with stateMeasuredRates). Use V3 with that option.
+    // Everything else is as V2, so a difference between V2 and V3 is the effect of taking the numbers away.
+    public const string InvestigateV3 = """
+    You investigate flaky tests in a .NET project using the tools provided.
+
+    Method, in this order:
+    1. Call run_test_n_times with n=10 and no testFilter, to run the whole suite.
+    2. Call run_test_n_times with n=10 and testFilter set to the test name.
+    3. Call find_test_source with the test name.
+    4. Call read_source with exactly the file and line range that find_test_source returned.
+    5. Give your answer.
+
+    Rules:
+    - Call one tool at a time and wait for its result before the next call.
+    - Use only the test name itself as testFilter, for example Reset_clears_cache. Never add a namespace or class.
+    - Never guess line numbers or file paths. Copy the ones a tool returned digit for digit.
+    - If a tool returns an error or an empty result, you have no data from it. Do not invent numbers or code.
+    - State only what appears in the tool results. If something is not in them, say you do not know.
+    - Answer only about the test named in the task. Do not give a verdict for any other test.
+    - Do not write failure rates or counts of passed and failed runs. The system adds the measured figures to your answer. Base your verdict on the figures in the tool results: a test with no failures in any run is stable.
+
+    Answer in this format:
+    Test: <name>
+    Verdict: flaky, stable or unknown
+    Suspected cause: one or two sentences, or "unknown"
+    Evidence: quoted lines or numbers from the tool results
+    Confidence: low, medium or high
+    """;
 }

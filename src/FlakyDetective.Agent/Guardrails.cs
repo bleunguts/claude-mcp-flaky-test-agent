@@ -173,42 +173,28 @@ public static class Measured
     // The model understands "passes alone, fails in the suite" but swaps the numbers, so a person scoring a
     // run compares its Failure rate line with these lines.
     //   MEASURED Reset_clears_cache: alone 0/10 failed; in the suite 6/10 failed
+    // The measured figures for one test: run on its own, and as part of the whole suite. A null count means that
+    // scope was not measured.
+    public record Rates(string Test, TestCount? Alone, TestCount? Suite);
+    public record TestCount(string TestName, int Runs, int Failed);
+
+    // The figures for every test that was run on its own, for code that checks the model's answer against them.
+    public static List<Rates> Targets(IReadOnlyList<ToolExecution> executions) =>
+        BuildRates(Read(executions, null));
+
     public static List<string> Lines(IReadOnlyList<ToolExecution> executions)
     {
         var lines = new List<string>();
-        var batches = new List<Batch>();
+        var batches = Read(executions, lines);
+        var rates = BuildRates(batches);
 
-        foreach (var execution in executions.Where(e => e.Name == "run_test_n_times" && !e.IsError))
+        foreach (var r in rates)
         {
-            var batch = Parse(execution.Result);
-            if (batch == null)
-            {
-                lines.Add("MEASURED: a run_test_n_times result could not be read");
-            }
-            else if (batch.Error != null)
-            {
-                lines.Add($"MEASURED: run_test_n_times returned an error: {batch.Error}");
-            }
-            else
-            {
-                batches.Add(batch);
-            }
+            lines.Add($"MEASURED {r.Test}: alone {Describe(r.Alone)}; in the suite {Describe(r.Suite)}");
         }
 
-        // The latest whole-suite batch, and the latest batch for each test that was run on its own.
         var suite = batches.LastOrDefault(b => string.IsNullOrWhiteSpace(b.Filter));
-        var targets = batches.Where(b => !string.IsNullOrWhiteSpace(b.Filter)).Select(b => b.Filter!.Trim()).Distinct().ToList();
-
-        foreach (var target in targets)
-        {
-            var alone = batches.Last(b => b.Filter?.Trim() == target);
-            var aloneSummary = alone.Summaries.FirstOrDefault(s => s.TestName == target)
-                               ?? (alone.Summaries.Count == 1 ? alone.Summaries[0] : null);
-            var suiteSummary = suite?.Summaries.FirstOrDefault(s => s.TestName == target);
-            lines.Add($"MEASURED {target}: alone {Describe(aloneSummary)}; in the suite {Describe(suiteSummary)}");
-        }
-
-        if (targets.Count == 0 && suite != null)
+        if (rates.Count == 0 && suite != null)
         {
             lines.Add("MEASURED in the suite: " + string.Join(", ", suite.Summaries.Select(s => $"{s.TestName} {s.Failed}/{s.Runs}")));
         }
@@ -216,8 +202,53 @@ public static class Measured
         return lines;
     }
 
-    private static string Describe(TestCount? count) =>
+    public static string Describe(TestCount? count) =>
         count == null ? "not measured" : $"{count.Failed}/{count.Runs} failed";
+
+    // Reads every run_test_n_times result that worked. Results that could not be read, or that carry an error,
+    // are described in `problems` when it is given.
+    private static List<Batch> Read(IReadOnlyList<ToolExecution> executions, List<string>? problems)
+    {
+        var batches = new List<Batch>();
+
+        foreach (var execution in executions.Where(e => e.Name == "run_test_n_times" && !e.IsError))
+        {
+            var batch = Parse(execution.Result);
+            if (batch == null)
+            {
+                problems?.Add("MEASURED: a run_test_n_times result could not be read");
+            }
+            else if (batch.Error != null)
+            {
+                problems?.Add($"MEASURED: run_test_n_times returned an error: {batch.Error}");
+            }
+            else
+            {
+                batches.Add(batch);
+            }
+        }
+
+        return batches;
+    }
+
+    // The latest whole-suite batch, and the latest batch for each test that was run on its own.
+    private static List<Rates> BuildRates(List<Batch> batches)
+    {
+        var suite = batches.LastOrDefault(b => string.IsNullOrWhiteSpace(b.Filter));
+        var result = new List<Rates>();
+
+        var targets = batches.Where(b => !string.IsNullOrWhiteSpace(b.Filter)).Select(b => b.Filter!.Trim()).Distinct();
+        foreach (var target in targets)
+        {
+            var alone = batches.Last(b => b.Filter?.Trim() == target);
+            var aloneCount = alone.Summaries.FirstOrDefault(s => s.TestName == target)
+                             ?? (alone.Summaries.Count == 1 ? alone.Summaries[0] : null);
+            var suiteCount = suite?.Summaries.FirstOrDefault(s => s.TestName == target);
+            result.Add(new Rates(target, aloneCount, suiteCount));
+        }
+
+        return result;
+    }
 
     private static Batch? Parse(string json)
     {
@@ -254,5 +285,58 @@ public static class Measured
     }
 
     private record Batch(string? Filter, string? Error, List<TestCount> Summaries);
-    private record TestCount(string TestName, int Runs, int Failed);
+}
+
+// Follow-up 1. The model sometimes says "flaky" about a test the tools just measured at zero failures, and the
+// other way round. Whether a verdict contradicts the measurements is arithmetic, so code checks it. Report only,
+// like the grounding check: it prints INCONSISTENT lines and does not reject the answer.
+public static class VerdictCheck
+{
+    public static List<string> Check(string answer, IReadOnlyList<ToolExecution> executions)
+    {
+        var problems = new List<string>();
+
+        var verdict = Regex.Match(answer, @"(?im)^[\s*_#>\-]*Verdict[\s*_]*:[\s*_]*(flaky|stable|unknown)\b");
+        if (!verdict.Success)
+        {
+            return problems;
+        }
+
+        var said = verdict.Groups[1].Value.ToLowerInvariant();
+        if (said == "unknown")
+        {
+            return problems;   // a refusal to decide is never a contradiction
+        }
+
+        // The answer says which test it is about; if it does not, every test that was run on its own counts.
+        var named = Regex.Match(answer, @"(?im)^[\s*_#>\-]*Test[\s*_]*:[\s*_`]*([A-Za-z0-9_.]+)");
+
+        foreach (var rates in Measured.Targets(executions))
+        {
+            if (named.Success && !string.Equals(named.Groups[1].Value, rates.Test, StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var counts = new[] { rates.Alone, rates.Suite }.Where(c => c != null).Select(c => c!).ToList();
+            if (counts.Count == 0)
+            {
+                continue;
+            }
+
+            var failures = counts.Sum(c => c.Failed);
+            var measured = $"alone {Measured.Describe(rates.Alone)}; in the suite {Measured.Describe(rates.Suite)}";
+
+            if (said == "flaky" && failures == 0)
+            {
+                problems.Add($"the verdict says flaky, but the tools measured no failures of {rates.Test} ({measured})");
+            }
+            else if (said == "stable" && failures > 0)
+            {
+                problems.Add($"the verdict says stable, but the tools measured failures of {rates.Test} ({measured})");
+            }
+        }
+
+        return problems;
+    }
 }

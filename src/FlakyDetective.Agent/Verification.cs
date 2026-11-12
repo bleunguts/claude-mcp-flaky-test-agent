@@ -33,7 +33,7 @@ public static class Verification
         {
             if (executions[i].Name.Equals("edit_source", StringComparison.Ordinal) 
                 && executions[i].Succeeded 
-                && executions[i].Input.TryGetValue("apply", out var apply) && IsTrue(apply))
+                && executions[i].Input.TryGetValue("apply", out var apply) && IsApply(apply))
             {
                 lastEditIndex = i;
                 break;
@@ -57,17 +57,19 @@ public static class Verification
         if (suite is null || suite.Runs < MinRuns) return new VerificationResult(VerificationState.SuiteRunMissing, "Suite run missing", suite, alone);
 
         return new VerificationResult(VerificationState.Passed, "Test passed", suite, alone);
+    }
 
-        static bool IsTrue(object? apply)
+    // True when the apply argument of an edit_source call means "really write the file". The value comes from the
+    // model's JSON: a real bool (scripts), the text "true", or a JsonElement (the Ollama adapter).
+    internal static bool IsApply(object? apply)
+    {
+        switch (apply)
         {
-            switch (apply)
-            {
-                case bool b: return b;
-                case string s: return s.Equals("true", StringComparison.OrdinalIgnoreCase);
-                case JsonElement { ValueKind: JsonValueKind.True }: return true;
-                case JsonElement { ValueKind: JsonValueKind.String } e: return string.Equals(e.GetString(), "true", StringComparison.OrdinalIgnoreCase);
-                default: return false;
-            }
+            case bool b: return b;
+            case string s: return s.Equals("true", StringComparison.OrdinalIgnoreCase);
+            case JsonElement { ValueKind: JsonValueKind.True }: return true;
+            case JsonElement { ValueKind: JsonValueKind.String } e: return string.Equals(e.GetString(), "true", StringComparison.OrdinalIgnoreCase);
+            default: return false;
         }
-    }  
+    }
 }

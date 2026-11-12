@@ -2,7 +2,7 @@
 
 A step-by-step build of an MCP server and a hand-written agentic loop that investigates flaky tests, proposes and verifies fixes, and raises pull requests. The project doubles as a guided tour of agentic architecture: the tool producer (MCP server), the tool orchestrator (the loop), and the guardrails around them are each built in the open, one small session at a time.
 
-**Status:** Sessions 1 to 4 complete, Session 5 next.
+**Status:** Sessions 1 to 4 complete, Session 5 in progress (scoring prompt V2), Session 6 next.
 
 ## Sessions
 
@@ -12,12 +12,14 @@ A step-by-step build of an MCP server and a hand-written agentic loop that inves
 | 2 | MCP server scaffold + `run_test_n_times` tool (`dotnet test --filter`, parse .trx), tested in MCP Inspector | No | Done |
 | 3 | Code analyzer tools (`read_source`, `find_test_source`) | No | Done |
 | 4 | Hand-coded agentic loop: MCP client + loop, driven by a scripted stub model | No | Done |
-| 5 | Investigation prompt + first diagnoses, scored against ground truth (local Ollama model, no credits) | No | Planned |
-| 6 | TeamCity in Docker + `get_flaky_candidates` tool | No | Planned |
-| 7 | Fix → verify 10x → git branch/PR tools | Yes | Planned |
-| 8 | Notifier, guardrails, audit log, final scorecard | Light | Planned |
+| 5 | Investigation prompt + first diagnoses, scored against ground truth (local Ollama model) ([#23](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/23)) | No | In progress |
+| 6 | Fix → verify 10x → git branch/PR tools ([#35](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/35)) | No (local model) | Planned |
+| 7 | Notifier, guardrails review, audit log, final scorecard ([#36](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/36)) | No | Planned |
+| 8 | Optional: CI candidates, `get_flaky_candidates` from a local history folder, then GitHub Actions ([#34](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/34)) | No | Optional |
 
-Sessions 1–4 and 6 need no API credits (Session 4 runs on a scripted stub model). Sessions 5 and 7 need a real model, and a free local one is available through Ollama (see "Ollama model adapter" below). A paid Claude API adapter can be added behind the same `IModel` interface later, with a Console API key supplied through the `ANTHROPIC_API_KEY` environment variable and never committed.
+No session needs API credits. Session 4 runs on a scripted stub model, and Sessions 5 to 7 use a free local model through Ollama (see "Ollama model adapter" below), which will be weak at writing fixes in Session 6. A paid Claude API adapter already exists behind the same `IModel` interface, with a Console API key supplied through the `ANTHROPIC_API_KEY` environment variable and never committed.
+
+Plan change: the CI session was originally "TeamCity in Docker". It needs Docker, a lot of disk and RAM, and a heavy server setup, none of which helps with learning the agent loop, so it moved to the end as an optional Session 8 using a local history folder first and GitHub Actions second. The later sessions moved up by one.
 
 ## How it is built
 
@@ -33,11 +35,11 @@ Sessions are small and cover one topic each. Every change follows the same path:
 │   └─ McpClient ──stdio──┐                                                  │
 │                         ▼                                                  │
 │  src/FlakyDetective.McpServer  (tool PRODUCER)                             │
-│   [McpServerTool] get_flaky_candidates · run_test_n_times ·                │
-│   read_source · find_test_source · git_branch_commit_pr · notify           │
+│   [McpServerTool] run_test_n_times · read_source · find_test_source ·      │
+│   git_branch_commit_pr · notify · (optional) get_flaky_candidates          │
 │        │                 │                                                 │
 │        ▼                 ▼                                                 │
-│   TeamCity REST     sandbox/FlakyLab (deliberately flaky NUnit tests)      │
+│   CI history        sandbox/FlakyLab (deliberately flaky NUnit tests)      │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -53,7 +55,7 @@ Sessions are small and cover one topic each. Every change follows the same path:
 
 ### Guardrails
 
-Enforced in the agent and finalised in Session 8:
+Enforced in the agent and finalised in Session 7:
 
 - Never push to `main`.
 - Never edit files outside `sandbox/`.
@@ -238,4 +240,24 @@ What it shows:
 - The guardrails fixed the process. Before them, none of the first seven runs completed the four-step method; now nearly all do, and the ones that do not are flagged.
 - They did not fix the content. The model still misstates the figures it was given, and it never named the mechanism behind the flakiness in any run.
 - Three runs per test is too few to rank anything: the same prompt got the flaky test's verdict right three times out of three in one batch and once out of three in the next.
-- Prompt `InvestigateV2` (answer only about the named test, copy numbers digit for digit, report the two rates separately) is in place but not yet scored.
+### Prompt V2 batch (10 runs)
+
+Prompt `InvestigateV2` (answer only about the named test, copy numbers digit for digit, report the two rates separately), run five times on the stable control and five times on the flaky test, with the 800-token reply cap and the retry nudge that quotes the exact read arguments. Same rubric.
+
+| Question | V1 batch (6 runs) | V2 batch (10 runs) |
+|---|---|---|
+| Method finished | 4 / 6 | 10 / 10 |
+| Verdict right | 3 / 6 | 6 / 10 (flaky test 5/5, control 1/5) |
+| Both stated failure rates match `MEASURED` | 1 / 6 | 2 / 10 (suite rate on the flaky test 5/5, single-test rate 0/5) |
+| Evidence traceable | 3 / 6 | 5 / 10 |
+| Cause stated, flaky test | 1 / 3, partly right | 1 / 5, partly right; none matched the key |
+| **Score** | **12 / 30 (40%)** | **24 / 50 (48%)** |
+
+What it shows:
+
+- **Reliability improved.** Every run finished the method and none timed out. In several runs the model wrote up to 25 tool calls in a single reply, many with template placeholders such as `${testSourceFile}`; the one-tool-per-turn guardrail ran only the first of each, and the reply cap bounds how long such a reply can get.
+- **The model now reads the suite figure correctly but invents the single-test figure.** It gave the right whole-suite failure count for the flaky test in 5 of 5 runs and the right single-test count in none.
+- **The stable control got worse.** Four of the five control runs said "flaky", against none of the two valid control runs under V1. Five runs is still a small sample, so this suggests a regression more than it proves one. In one run the verdict said flaky while the stated rates were 0/10 and 0/10.
+- **The cause was still never found.** One run mentioned race conditions in the suite; none gave the cause the key describes.
+
+What this points to: the model is poor at reporting numbers and at turning them into a verdict, which are exactly the parts code can do. The next improvements to try are a check that flags a verdict contradicted by the measured numbers, and letting the loop state the measured rates itself instead of asking the model to copy them. Both are small and deterministic.

@@ -3,6 +3,7 @@
     <Project Path="sandbox/FlakyLab/FlakyLab.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/FlakyDetective.Agent.Tests/FlakyDetective.Agent.Tests.csproj" />
     <Project Path="tests/FlakyDetective.McpServer.Tests/FlakyDetective.McpServer.Tests.csproj" />
   </Folder>
   <Folder Name="/src/">

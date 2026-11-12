@@ -15,6 +15,8 @@ public class AgentLoop
     //   systemPrompt     standing instructions, sent on every turn
     //   nextMissingStep  guardrail 2: names the next step still to do, or null when the method is complete.
     //                    An answer that arrives early is not accepted; the model is nudged instead.
+    //   answerProblem    guardrail 2: names what is wrong with the answer itself (for example no Verdict
+    //                    line), or null when it is fine. A malformed answer is nudged in the same way.
     //   maxNudges        how many times to nudge before giving up and flagging the run as incomplete
     public static async Task<AgentResult> RunLoopAsync(
         IModel model,
@@ -24,6 +26,7 @@ public class AgentLoop
         int maxIterations,
         string? systemPrompt = null,
         Func<IReadOnlyList<ToolExecution>, string?>? nextMissingStep = null,
+        Func<string, string?>? answerProblem = null,
         int maxNudges = 3)
     {
         var messages = new List<Message>
@@ -38,6 +41,9 @@ public class AgentLoop
         var toolsCalled = new List<string>();
         var executions = new List<ToolExecution>();
         var nudges = 0;
+
+        // What is still wrong or missing when the model offers an answer: first the method, then the answer.
+        string? Outstanding(string answer) => nextMissingStep?.Invoke(executions) ?? answerProblem?.Invoke(answer);
 
         for (var iteration = 1; iteration <= maxIterations; iteration++)
         {
@@ -59,16 +65,16 @@ public class AgentLoop
                 // answer, which stays in the history, and gets a short user message naming what is missing.
                 // Roles still alternate (assistant answer, then user nudge). The nudge limit and the
                 // iteration cap both stop this from looping forever.
-                var missing = nextMissingStep?.Invoke(executions);
+                var missing = Outstanding(text);
                 if (missing != null && nudges < maxNudges && iteration < maxIterations)
                 {
                     nudges++;
                     Log.Nudge(nudges, maxNudges, missing);
-                    messages.Add(new Message("user", [new TextBlock($"You have not finished the method. {missing}")]));
+                    messages.Add(new Message("user", [new TextBlock($"You have not finished. {missing}")]));
                     continue;
                 }
 
-                return Stop(LoopStopReason.EndTurn, iteration, text, false, toolsCalled, executions, tools, nextMissingStep);
+                return Stop(LoopStopReason.EndTurn, iteration, text, false, toolsCalled, executions, tools, Outstanding);
             }
 
             var toolResults = new List<ContentBlock>();
@@ -124,7 +130,7 @@ public class AgentLoop
         return Stop(
             LoopStopReason.MaxIterationsReached, maxIterations,
             $"Maximum iterations reached without a successful completion. {userPrompt}", true,
-            toolsCalled, executions, tools, nextMissingStep);
+            toolsCalled, executions, tools, Outstanding);
     }
 
     // Everything the loop reports when it stops, in one place: why, what really ran, whether the method was
@@ -137,13 +143,13 @@ public class AgentLoop
         List<string> toolsCalled,
         List<ToolExecution> executions,
         IReadOnlyList<ToolDefinition> tools,
-        Func<IReadOnlyList<ToolExecution>, string?>? nextMissingStep)
+        Func<string, string?> outstanding)
     {
         Log.LoopStopped(reason, iterations);
         Log.ToolsCalled(toolsCalled);
         Log.Measured(Measured.Lines(executions));
 
-        var missing = nextMissingStep?.Invoke(executions);
+        var missing = outstanding(text);
         Log.Incomplete(missing);
 
         if (!hitCap)

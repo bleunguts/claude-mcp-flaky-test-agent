@@ -261,7 +261,8 @@ Console.WriteLine($"Prompt: {livePrompt}");
 
 var liveResult = await AgentLoop.RunLoopAsync(
     liveModel, client, toolDefinitions, livePrompt, 12, Prompts.InvestigateV1,
-    nextMissingStep: InvestigationMethod.NextMissingStep);
+    nextMissingStep: InvestigationMethod.NextMissingStep,
+    answerProblem: InvestigationMethod.AnswerProblem);
 Console.WriteLine($"Final result: {liveResult}");
 #endregion
 
@@ -287,7 +288,8 @@ string claudePrompt = "Find and read the Reset_clears_cache test";
 
 var claudeResult = await AgentLoop.RunLoopAsync(
     claudeModel, client, toolDefinitions, claudePrompt, 12, Prompts.InvestigateV1,
-    nextMissingStep: InvestigationMethod.NextMissingStep);
+    nextMissingStep: InvestigationMethod.NextMissingStep,
+    answerProblem: InvestigationMethod.AnswerProblem);
 Console.WriteLine($"Final result: {claudeResult}");
 */
 #endregion
@@ -309,6 +311,14 @@ Console.WriteLine($"Final result: {claudeResult}");
 //           InventedEvidence        guardrail 3, grounding check (report only)
 //             "UNGROUNDED: the answer cites read_source, which was never called" and
 //             "UNGROUNDED: the evidence quoted for ping does not appear in any of its real results".
+//           ReadFailsThenRetries    guardrail 2, a step counts only if the call worked
+//             The read_source call returns "file not found", so: "Nudge 1/3 ... Your read_source call
+//             failed ... Do not guess a path." The script then reads the real lines and finishes cleanly.
+//           AnswerWithoutVerdict    guardrail 2, the answer must follow the format
+//             An answer with no Verdict line is nudged: "Your answer must follow the format ...".
+//           RelabelledFailure       guardrail 3, failed runs listed in the answer must exist
+//             "UNGROUNDED: the answer lists failed run(s) of Mid_is_positive (run 1) that no tool reported"
+//             (a small model copied other tests' failed rows out of a suite result and relabelled them).
 // LESSON:   A skipped tool_use still needs a tool_result, because the API pairs every request with a
 //           result. The skipped call stays in the history; only its execution is refused. A nudge is just
 //           a user message after the assistant's answer, so roles still alternate. The grounding check
@@ -333,6 +343,25 @@ Console.WriteLine($"Final result: {guardrailResult}");
 Console.WriteLine("===================================================================== guardrail 3: ungrounded evidence");
 guardrailResult = await AgentLoop.RunLoopAsync(
     GuardrailScripts.InventedEvidence(), client, toolDefinitions, "Investigate the test Mid_is_positive.", 5);
+Console.WriteLine($"Final result: {guardrailResult}");
+
+Console.WriteLine("===================================================================== guardrail 2: a failed step does not count");
+guardrailResult = await AgentLoop.RunLoopAsync(
+    GuardrailScripts.ReadFailsThenRetries(), client, toolDefinitions, "Investigate the test Mid_is_positive.", 12,
+    nextMissingStep: InvestigationMethod.NextMissingStep,
+    answerProblem: InvestigationMethod.AnswerProblem);
+Console.WriteLine($"Final result: {guardrailResult}");
+
+Console.WriteLine("===================================================================== guardrail 2: the answer needs a Verdict");
+guardrailResult = await AgentLoop.RunLoopAsync(
+    GuardrailScripts.AnswerWithoutVerdict(), client, toolDefinitions, "Investigate the test Mid_is_positive.", 12,
+    nextMissingStep: InvestigationMethod.NextMissingStep,
+    answerProblem: InvestigationMethod.AnswerProblem);
+Console.WriteLine($"Final result: {guardrailResult}");
+
+Console.WriteLine("===================================================================== guardrail 3: relabelled failures");
+guardrailResult = await AgentLoop.RunLoopAsync(
+    GuardrailScripts.RelabelledFailure(), client, toolDefinitions, "Investigate the test Mid_is_positive.", 5);
 Console.WriteLine($"Final result: {guardrailResult}");
 */
 #endregion

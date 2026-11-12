@@ -4,36 +4,71 @@ using System.Text.RegularExpressions;
 namespace FlakyDetective.Agent;
 
 // One tool call the loop really ran (skipped calls are not included), with what came back.
-public record ToolExecution(string Name, IReadOnlyDictionary<string, object?> Input, string Result, bool IsError);
+public record ToolExecution(string Name, IReadOnlyDictionary<string, object?> Input, string Result, bool IsError)
+{
+    // A call counts as done only if it worked. Our tools report their own failures inside a normal result
+    // ("error": "file not found", "no test named ..."), so IsError alone is not enough. Plain-text results such
+    // as "pong" are not JSON and are treated as fine.
+    public bool Succeeded => !IsError && !ReportsError(Result);
+
+    private static bool ReportsError(string result)
+    {
+        try
+        {
+            using var document = JsonDocument.Parse(result);
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                   && document.RootElement.TryGetProperty("error", out var error)
+                   && error.ValueKind == JsonValueKind.String
+                   && !string.IsNullOrEmpty(error.GetString());
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+}
 
 // The investigation method written down as data, so code can check it instead of hoping the model follows it.
 public static class InvestigationMethod
 {
-    // Guardrail 2. Returns a sentence naming the first step that has not happened yet, or null when the
-    // method is complete. The loop uses it to refuse an answer that comes too early.
-    public static string? NextMissingStep(IReadOnlyList<ToolExecution> calls)
+    // Guardrail 2. Returns a sentence naming the first step that is not done yet, or null when the method is
+    // complete. The loop uses it to refuse an answer that comes too early. A step is done only when a call
+    // to that tool worked: a read_source that came back "file not found" does not count, and the nudge says
+    // so, so a guessed path cannot satisfy the method.
+    public static string? NextMissingStep(IReadOnlyList<ToolExecution> calls) =>
+        Step(calls, "run_test_n_times", c => !HasFilter(c),
+            "First run the whole suite: call run_test_n_times with n=10 and no testFilter.",
+            "Your run of the whole suite failed. Call run_test_n_times again with n=10 and no testFilter.")
+        ?? Step(calls, "run_test_n_times", HasFilter,
+            "Next run the single test: call run_test_n_times with n=10 and testFilter set to the test name.",
+            "Your run of the single test failed. Call run_test_n_times again with n=10 and testFilter set to the test name only.")
+        ?? Step(calls, "find_test_source", _ => true,
+            "Next call find_test_source with the test name.",
+            "Your find_test_source call failed. Call it again with the exact test name.")
+        ?? Step(calls, "read_source", _ => true,
+            "Next call read_source with the file and line range that find_test_source returned.",
+            "Your read_source call failed. Call it again with exactly the file and line range that find_test_source returned. Do not guess a path.");
+
+    // Guardrail 2, the answer itself. The prompt asks for a fixed format and the scorecard depends on it. Some
+    // runs ended with a sentence like "I will run it again", which is not an answer. Returns null when the
+    // answer has a Verdict line, otherwise a sentence for the nudge.
+    public static string? AnswerProblem(string answer) =>
+        Regex.IsMatch(answer, @"(?im)^[\s*_#>\-]*Verdict[\s*_]*:[\s*_]*(flaky|stable|unknown)\b")
+            ? null
+            : "Your answer must follow the format and include a line 'Verdict: flaky', 'Verdict: stable' or 'Verdict: unknown'.";
+
+    // null when a call to the tool that matches has worked; the first-time text when there was no such call;
+    // the retry text when there were calls but none worked.
+    private static string? Step(
+        IReadOnlyList<ToolExecution> calls, string tool, Func<ToolExecution, bool> matches, string firstTime, string retry)
     {
-        if (!calls.Any(c => c.Name == "run_test_n_times" && !HasFilter(c)))
+        var candidates = calls.Where(c => c.Name == tool && matches(c)).ToList();
+        if (candidates.Any(c => c.Succeeded))
         {
-            return "First run the whole suite: call run_test_n_times with n=10 and no testFilter.";
+            return null;
         }
 
-        if (!calls.Any(c => c.Name == "run_test_n_times" && HasFilter(c)))
-        {
-            return "Next run the single test: call run_test_n_times with n=10 and testFilter set to the test name.";
-        }
-
-        if (!calls.Any(c => c.Name == "find_test_source"))
-        {
-            return "Next call find_test_source with the test name.";
-        }
-
-        if (!calls.Any(c => c.Name == "read_source"))
-        {
-            return "Next call read_source with the file and line range that find_test_source returned.";
-        }
-
-        return null;
+        return candidates.Count == 0 ? firstTime : retry;
     }
 
     private static bool HasFilter(ToolExecution call) =>
@@ -78,8 +113,31 @@ public static class Grounding
             }
         }
 
+        // 3. A failed run listed in the answer must be a failed run that some tool really reported. A small model
+        // will copy failed rows of other tests out of a whole-suite result and relabel them as the test it was asked
+        // about, so the test name and the run number are both checked.
+        var reported = executions
+            .SelectMany(e => FailedRun.Matches(e.Result))
+            .Select(m => (Test: m.Groups[1].Value, Run: m.Groups[2].Value))
+            .ToHashSet();
+
+        var invented = FailedRun.Matches(answer)
+            .Select(m => (Test: m.Groups[1].Value, Run: m.Groups[2].Value))
+            .Distinct()
+            .Where(claim => !reported.Contains(claim))
+            .GroupBy(claim => claim.Test);
+
+        foreach (var group in invented)
+        {
+            problems.Add($"the answer lists failed run(s) of {group.Key} (run {string.Join(", ", group.Select(g => g.Run))}) that no tool reported");
+        }
+
         return problems.Distinct().ToList();
     }
+
+    // Matches the shape of a failed row in run_test_n_times results: "testName":"X","runNumber":N,"outcome":"Failed"
+    private static readonly Regex FailedRun =
+        new(@"""testName""\s*:\s*""([^""]+)""\s*,\s*""runNumber""\s*:\s*(\d+)\s*,\s*""outcome""\s*:\s*""Failed""");
 
     private static string RemoveWhitespace(string text) => Regex.Replace(text, @"\s+", "");
 }

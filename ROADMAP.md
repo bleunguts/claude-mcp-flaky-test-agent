@@ -2,7 +2,7 @@
 
 A step-by-step build of an MCP server and a hand-written agentic loop that investigates flaky tests, proposes and verifies fixes, and raises pull requests. The project doubles as a guided tour of agentic architecture: the tool producer (MCP server), the tool orchestrator (the loop), and the guardrails around them are each built in the open, one small session at a time.
 
-**Status:** Sessions 1 to 4 complete, Session 5 next.
+**Status:** Sessions 1 to 4 complete, Session 5 in progress (scoring prompt V2), Session 6 next.
 
 ## Sessions
 
@@ -12,12 +12,14 @@ A step-by-step build of an MCP server and a hand-written agentic loop that inves
 | 2 | MCP server scaffold + `run_test_n_times` tool (`dotnet test --filter`, parse .trx), tested in MCP Inspector | No | Done |
 | 3 | Code analyzer tools (`read_source`, `find_test_source`) | No | Done |
 | 4 | Hand-coded agentic loop: MCP client + loop, driven by a scripted stub model | No | Done |
-| 5 | Investigation prompt + first diagnoses, scored against ground truth (local Ollama model, no credits) | No | Planned |
-| 6 | TeamCity in Docker + `get_flaky_candidates` tool | No | Planned |
-| 7 | Fix → verify 10x → git branch/PR tools | Yes | Planned |
-| 8 | Notifier, guardrails, audit log, final scorecard | Light | Planned |
+| 5 | Investigation prompt + first diagnoses, scored against ground truth (local Ollama model) ([#23](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/23)) | No | In progress |
+| 6 | Fix → verify 10x → git branch/PR tools ([#35](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/35)) | No (local model) | Planned |
+| 7 | Notifier, guardrails review, audit log, final scorecard ([#36](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/36)) | No | Planned |
+| 8 | Optional: CI candidates, `get_flaky_candidates` from a local history folder, then GitHub Actions ([#34](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/34)) | No | Optional |
 
-Sessions 1–4 and 6 need no API credits (Session 4 runs on a scripted stub model). Sessions 5 and 7 need a real model, and a free local one is available through Ollama (see "Ollama model adapter" below). A paid Claude API adapter can be added behind the same `IModel` interface later, with a Console API key supplied through the `ANTHROPIC_API_KEY` environment variable and never committed.
+No session needs API credits. Session 4 runs on a scripted stub model, and Sessions 5 to 7 use a free local model through Ollama (see "Ollama model adapter" below), which will be weak at writing fixes in Session 6. A paid Claude API adapter already exists behind the same `IModel` interface, with a Console API key supplied through the `ANTHROPIC_API_KEY` environment variable and never committed.
+
+Plan change: the CI session was originally "TeamCity in Docker". It needs Docker, a lot of disk and RAM, and a heavy server setup, none of which helps with learning the agent loop, so it moved to the end as an optional Session 8 using a local history folder first and GitHub Actions second. The later sessions moved up by one.
 
 ## How it is built
 
@@ -33,11 +35,11 @@ Sessions are small and cover one topic each. Every change follows the same path:
 │   └─ McpClient ──stdio──┐                                                  │
 │                         ▼                                                  │
 │  src/FlakyDetective.McpServer  (tool PRODUCER)                             │
-│   [McpServerTool] get_flaky_candidates · run_test_n_times ·                │
-│   read_source · find_test_source · git_branch_commit_pr · notify           │
+│   [McpServerTool] run_test_n_times · read_source · find_test_source ·      │
+│   git_branch_commit_pr · notify · (optional) get_flaky_candidates          │
 │        │                 │                                                 │
 │        ▼                 ▼                                                 │
-│   TeamCity REST     sandbox/FlakyLab (deliberately flaky NUnit tests)      │
+│   CI history        sandbox/FlakyLab (deliberately flaky NUnit tests)      │
 └────────────────────────────────────────────────────────────────────────────┘
 ```
 
@@ -53,7 +55,7 @@ Sessions are small and cover one topic each. Every change follows the same path:
 
 ### Guardrails
 
-Enforced in the agent and finalised in Session 8:
+Enforced in the agent and finalised in Session 7:
 
 - Never push to `main`.
 - Never edit files outside `sandbox/`.

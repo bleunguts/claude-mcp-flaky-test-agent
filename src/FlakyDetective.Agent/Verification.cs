@@ -15,6 +15,17 @@ public static class Verification
 {
     public const int MinRuns = 20;
 
+    // For the end of a run: null when there is nothing to flag, otherwise what is wrong. An edit that was applied
+    // but is not proven (not enough runs, or the test still fails) is flagged. No applied edit means no fix was
+    // tried, so there is nothing to flag. Report only, like VerdictCheck.
+    public static string? Unproven(IReadOnlyList<ToolExecution> executions, string targetTest)
+    {
+        var result = Check(executions, targetTest);
+        return result.State is VerificationState.NoAppliedEdit or VerificationState.Passed
+            ? null
+            : $"an edit was applied but the fix for {targetTest} is not proven ({result.State}): {result.Message}";
+    }
+
     public static VerificationResult Check(IReadOnlyList<ToolExecution> executions, string targetTest)
     {
         int lastEditIndex = -1;

@@ -194,6 +194,42 @@ public class VerificationTests
         Assert.That(result.State, Is.EqualTo(VerificationState.Passed));
     }
 
+    // ---- Unproven: what the loop prints at the end of a run ----
+
+    [Test]
+    public void Unproven_is_null_when_no_fix_was_tried()
+    {
+        Assert.That(Verification.Unproven([Suite(20, 6), Alone(20, 0)], Target), Is.Null);
+    }
+
+    [Test]
+    public void Unproven_is_null_for_a_dry_run_edit()
+    {
+        Assert.That(Verification.Unproven([Edit(false)], Target), Is.Null);
+    }
+
+    [Test]
+    public void Unproven_is_null_when_the_fix_is_proven()
+    {
+        Assert.That(Verification.Unproven([Edit(true), Suite(20, 0), Alone(20, 0)], Target), Is.Null);
+    }
+
+    [Test]
+    public void Unproven_flags_an_applied_edit_with_no_runs_after_it()
+    {
+        var problem = Verification.Unproven([Edit(true)], Target);
+
+        Assert.That(problem, Does.Contain(Target).And.Contain("not proven").And.Contain("SingleRunMissing"));
+    }
+
+    [Test]
+    public void Unproven_flags_an_applied_edit_that_still_fails()
+    {
+        var problem = Verification.Unproven([Edit(true), Suite(20, 0), Alone(20, 2)], Target);
+
+        Assert.That(problem, Does.Contain("Failed"));
+    }
+
     // ---- helpers: build the executions the loop would have recorded ----
 
     private static ToolExecution Edit(object? apply, bool failed = false)

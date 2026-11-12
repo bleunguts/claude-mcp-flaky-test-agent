@@ -21,6 +21,8 @@ public class AgentLoop
     //   stateMeasuredRates  the loop adds the figures the tools measured to the end of the answer itself, so the
     //                    model does not have to copy them (it copied the suite figure well and invented the
     //                    single-test one). Use with a prompt that does not ask the model for failure rates.
+    //   targetTest       the test being fixed. When set, the run ends with an UNVERIFIED line if an edit was applied
+    //                    but the runs after it do not prove the fix (Verification.Unproven). Report only.
     public static async Task<AgentResult> RunLoopAsync(
         IModel model,
         McpClient client,
@@ -31,7 +33,8 @@ public class AgentLoop
         Func<IReadOnlyList<ToolExecution>, string?>? nextMissingStep = null,
         Func<string, string?>? answerProblem = null,
         int maxNudges = 3,
-        bool stateMeasuredRates = false)
+        bool stateMeasuredRates = false,
+        string? targetTest = null)
     {
         var messages = new List<Message>
         {
@@ -78,7 +81,7 @@ public class AgentLoop
                     continue;
                 }
 
-                return Stop(LoopStopReason.EndTurn, iteration, text, false, toolsCalled, executions, tools, Outstanding, stateMeasuredRates);
+                return Stop(LoopStopReason.EndTurn, iteration, text, false, toolsCalled, executions, tools, Outstanding, stateMeasuredRates, targetTest);
             }
 
             var toolResults = new List<ContentBlock>();
@@ -134,7 +137,7 @@ public class AgentLoop
         return Stop(
             LoopStopReason.MaxIterationsReached, maxIterations,
             $"Maximum iterations reached without a successful completion. {userPrompt}", true,
-            toolsCalled, executions, tools, Outstanding, stateMeasuredRates);
+            toolsCalled, executions, tools, Outstanding, stateMeasuredRates, targetTest);
     }
 
     // Everything the loop reports when it stops, in one place: why, what really ran, whether the method was
@@ -149,7 +152,8 @@ public class AgentLoop
         List<ToolExecution> executions,
         IReadOnlyList<ToolDefinition> tools,
         Func<string, string?> outstanding,
-        bool stateMeasuredRates)
+        bool stateMeasuredRates,
+        string? targetTest)
     {
         Log.LoopStopped(reason, iterations);
         Log.ToolsCalled(toolsCalled);
@@ -164,6 +168,12 @@ public class AgentLoop
         {
             Log.Ungrounded(Grounding.Check(text, tools.Select(t => t.Name), executions));
             Log.Inconsistent(VerdictCheck.Check(text, executions));
+        }
+
+        // A fix that was applied but not proven by 20 clean runs after it (hit cap or not: the sandbox was changed).
+        if (targetTest != null)
+        {
+            Log.Unverified(Verification.Unproven(executions, targetTest));
         }
 
         // Follow-up 2: the loop states the measured figures itself, in its own words and after the model's answer,

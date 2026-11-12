@@ -105,6 +105,15 @@ public class Log
         }
     }
 
+    // A fix was applied to the sandbox but the runs after it do not prove it.
+    public static void Unverified(string? problem)
+    {
+        if (problem != null)
+        {
+            Console.WriteLine($"UNVERIFIED: {problem}");
+        }
+    }
+
     public static void Ungrounded(IReadOnlyList<string> problems)
     {
         foreach (var problem in problems)

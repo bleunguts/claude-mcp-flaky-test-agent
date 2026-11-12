@@ -2,6 +2,9 @@
   <Folder Name="/sandbox/">
     <Project Path="sandbox/FlakyLab/FlakyLab.csproj" />
   </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/FlakyDetective.McpServer.Tests/FlakyDetective.McpServer.Tests.csproj" />
+  </Folder>
   <Folder Name="/src/">
     <Project Path="src/FlakyDetective.Agent/FlakyDetective.Agent.csproj" />
     <Project Path="src/FlakyDetective.McpServer/FlakyDetective.McpServer.csproj" />

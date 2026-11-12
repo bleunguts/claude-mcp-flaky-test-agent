@@ -18,6 +18,9 @@ public class AgentLoop
     //   answerProblem    guardrail 2: names what is wrong with the answer itself (for example no Verdict
     //                    line), or null when it is fine. A malformed answer is nudged in the same way.
     //   maxNudges        how many times to nudge before giving up and flagging the run as incomplete
+    //   stateMeasuredRates  the loop adds the figures the tools measured to the end of the answer itself, so the
+    //                    model does not have to copy them (it copied the suite figure well and invented the
+    //                    single-test one). Use with a prompt that does not ask the model for failure rates.
     public static async Task<AgentResult> RunLoopAsync(
         IModel model,
         McpClient client,
@@ -27,7 +30,8 @@ public class AgentLoop
         string? systemPrompt = null,
         Func<IReadOnlyList<ToolExecution>, string?>? nextMissingStep = null,
         Func<string, string?>? answerProblem = null,
-        int maxNudges = 3)
+        int maxNudges = 3,
+        bool stateMeasuredRates = false)
     {
         var messages = new List<Message>
         {
@@ -74,7 +78,7 @@ public class AgentLoop
                     continue;
                 }
 
-                return Stop(LoopStopReason.EndTurn, iteration, text, false, toolsCalled, executions, tools, Outstanding);
+                return Stop(LoopStopReason.EndTurn, iteration, text, false, toolsCalled, executions, tools, Outstanding, stateMeasuredRates);
             }
 
             var toolResults = new List<ContentBlock>();
@@ -130,11 +134,12 @@ public class AgentLoop
         return Stop(
             LoopStopReason.MaxIterationsReached, maxIterations,
             $"Maximum iterations reached without a successful completion. {userPrompt}", true,
-            toolsCalled, executions, tools, Outstanding);
+            toolsCalled, executions, tools, Outstanding, stateMeasuredRates);
     }
 
     // Everything the loop reports when it stops, in one place: why, what really ran, whether the method was
-    // finished (guardrail 2, last line of defence) and whether the answer's evidence holds up (guardrail 3).
+    // finished (guardrail 2, last line of defence), whether the answer's evidence holds up (guardrail 3) and
+    // whether its verdict agrees with the measurements.
     private static AgentResult Stop(
         LoopStopReason reason,
         int iterations,
@@ -143,11 +148,14 @@ public class AgentLoop
         List<string> toolsCalled,
         List<ToolExecution> executions,
         IReadOnlyList<ToolDefinition> tools,
-        Func<string, string?> outstanding)
+        Func<string, string?> outstanding,
+        bool stateMeasuredRates)
     {
         Log.LoopStopped(reason, iterations);
         Log.ToolsCalled(toolsCalled);
-        Log.Measured(Measured.Lines(executions));
+
+        var measured = Measured.Lines(executions);
+        Log.Measured(measured);
 
         var missing = outstanding(text);
         Log.Incomplete(missing);
@@ -155,6 +163,15 @@ public class AgentLoop
         if (!hitCap)
         {
             Log.Ungrounded(Grounding.Check(text, tools.Select(t => t.Name), executions));
+            Log.Inconsistent(VerdictCheck.Check(text, executions));
+        }
+
+        // Follow-up 2: the loop states the measured figures itself, in its own words and after the model's answer,
+        // so a wrong figure written by the model cannot be the last word.
+        if (stateMeasuredRates && !hitCap && measured.Count > 0)
+        {
+            text += Environment.NewLine + Environment.NewLine + "Measured by the tools:" + Environment.NewLine
+                    + string.Join(Environment.NewLine, measured.Select(line => line.Replace("MEASURED ", "")));
         }
 
         return new AgentResult(text, hitCap, iterations, missing != null);

@@ -96,6 +96,15 @@ public class Log
         }
     }
 
+    // The verdict contradicts what the tools measured (for example "flaky" for a test with no failures).
+    public static void Inconsistent(IReadOnlyList<string> problems)
+    {
+        foreach (var problem in problems)
+        {
+            Console.WriteLine($"INCONSISTENT: {problem}");
+        }
+    }
+
     public static void Ungrounded(IReadOnlyList<string> problems)
     {
         foreach (var problem in problems)

@@ -200,6 +200,14 @@ public static class GuardrailScripts
         messages => Script.Finish("Verdict: stable"),
     ]);
 
+    // Measures Mid_is_positive (which never fails) and then calls it flaky. The verdict contradicts the
+    // measurements, so expect an INCONSISTENT line. Use with no required steps.
+    public static ScriptedModel VerdictContradictsMeasured() => new ScriptedModel([
+        messages => Script.CallTool("call_1", "run_test_n_times", new Dictionary<string, object?> { { "n", 1 } }),
+        messages => Script.CallTool("call_2", "run_test_n_times", new Dictionary<string, object?> { { "n", 1 }, { "testFilter", "Mid_is_positive" } }),
+        messages => Script.Finish("Test: Mid_is_positive\nVerdict: flaky\nSuspected cause: unknown\nConfidence: low"),
+    ]);
+
     // Runs the whole suite once, then lists a failed run of Mid_is_positive that no tool reported (it never fails).
     // This is the model relabelling another test's failures. Use with no required steps; expect an UNGROUNDED line.
     public static ScriptedModel RelabelledFailure() => new ScriptedModel([

@@ -63,4 +63,30 @@ public static class PathGuard
         fullPath = candidate;
         return true;
     }
+
+    public static bool TryResolveForWrite(string root, string path, out string fullPath, out string? error)
+    {
+        if (!TryResolve(root, path, out fullPath, out error))
+        {
+            return false;
+        }
+        
+        var relativePath = Path.GetRelativePath(Path.GetFullPath(root), fullPath);
+        var segments = relativePath.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        if (!segments.First().Equals("sandbox", StringComparison.OrdinalIgnoreCase))
+        {
+            fullPath = "";
+            error = "path must be under sandbox/ folder";
+            return false;
+        }
+
+        if (!fullPath.EndsWith(".cs"))
+        {
+            fullPath = "";
+            error = "only .cs files can be written to";
+            return false;
+        }
+        
+        return true;
+    }
 }

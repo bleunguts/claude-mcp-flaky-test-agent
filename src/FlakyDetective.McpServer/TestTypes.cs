@@ -19,5 +19,11 @@ public record ReadSourceResult(
     bool Truncated,     // true if the size limit cut the result short
     string? Error);     // null on success
 
+public record EditSourceResult(
+    string Path,
+    bool Applied,
+    string Diff,
+    string? Error);
+
 public record TestLocation(string File, int StartLine, int EndLine);
 public record FindTestResult(string TestName, List<TestLocation> Matches, string? Error);

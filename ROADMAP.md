@@ -1,8 +1,8 @@
 # Roadmap
 
-A step-by-step build of an MCP server and a hand-written agentic loop that investigates flaky tests, proposes and verifies fixes, and raises pull requests. The project doubles as a guided tour of agentic architecture: the tool producer (MCP server), the tool orchestrator (the loop), and the guardrails around them are each built in the open, one small session at a time.
+A step-by-step build of an MCP server and a hand-written agentic loop that investigates flaky tests, and proposes fixes that it verifies, leaving any pull request to a human. The project doubles as a guided tour of agentic architecture: the tool producer (MCP server), the tool orchestrator (the loop), and the guardrails around them are each built in the open, one small session at a time.
 
-**Status:** Sessions 1 to 4 complete, Session 5 in progress (scoring prompt V2), Session 6 next.
+**Status:** Sessions 1 to 6 complete, Session 7 next.
 
 ## Sessions
 
@@ -12,8 +12,8 @@ A step-by-step build of an MCP server and a hand-written agentic loop that inves
 | 2 | MCP server scaffold + `run_test_n_times` tool (`dotnet test --filter`, parse .trx), tested in MCP Inspector | No | Done |
 | 3 | Code analyzer tools (`read_source`, `find_test_source`) | No | Done |
 | 4 | Hand-coded agentic loop: MCP client + loop, driven by a scripted stub model | No | Done |
-| 5 | Investigation prompt + first diagnoses, scored against ground truth (local Ollama model) ([#23](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/23)) | No | In progress |
-| 6 | Fix → verify 10x → git branch/PR tools ([#35](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/35)) | No (local model) | Planned |
+| 5 | Investigation prompt + first diagnoses, scored against ground truth (local Ollama model) ([#23](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/23)) | No | Done |
+| 6 | Propose a fix → verify with 20 runs (`edit_source`, `Verification`); no PR tool ([#35](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/35)) | No (local model) | Done |
 | 7 | Notifier, guardrails review, audit log, final scorecard ([#36](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/36)) | No | Planned |
 | 8 | Optional: CI candidates, `get_flaky_candidates` from a local history folder, then GitHub Actions ([#34](https://github.com/bleunguts/claude-mcp-flaky-test-agent/issues/34)) | No | Optional |
 
@@ -36,7 +36,7 @@ Sessions are small and cover one topic each. Every change follows the same path:
 │                         ▼                                                  │
 │  src/FlakyDetective.McpServer  (tool PRODUCER)                             │
 │   [McpServerTool] run_test_n_times · read_source · find_test_source ·      │
-│   git_branch_commit_pr · notify · (optional) get_flaky_candidates          │
+│   edit_source · notify · (optional) get_flaky_candidates                    │
 │        │                 │                                                 │
 │        ▼                 ▼                                                 │
 │   CI history        sandbox/FlakyLab (deliberately flaky NUnit tests)      │
@@ -201,7 +201,7 @@ Known limitations:
 - Server-side refusal `fallbacks` (recommended for this model) are not used; they need the beta endpoint and a second set of types.
 - Responses are not streamed and prompt caching is not used.
 
-## Session 5: loop guardrails (in progress)
+## Session 5: loop guardrails
 
 Live runs with a small local model (`qwen2.5:3b`) showed that prompt wording alone cannot make it follow a multi-step method. Across the runs it made parallel tool calls, skipped the suite run and the source read, answered from one or two measurements, attached other tests' numbers to the test it was asked about, and once invented tool results that never happened. Things code can enforce, code enforces: the loop now holds three guardrails, a measurement report and a verdict check, all checked with scripted models (no LLM) in region 9 of `Program.cs`.
 
@@ -262,4 +262,27 @@ What it shows:
 - **The stable control got worse.** Four of the five control runs said "flaky", against none of the two valid control runs under V1. Five runs is still a small sample, so this suggests a regression more than it proves one. In one run the verdict said flaky while the stated rates were 0/10 and 0/10.
 - **The cause was still never found.** One run mentioned race conditions in the suite; none gave the cause the key describes.
 
-What this points to: the model is poor at reporting numbers and at turning them into a verdict, which are exactly the parts code can do. Both improvements are now in (guardrails 5 and 6 above): a check that flags a verdict contradicted by the measured numbers, and the loop stating the measured rates itself. A V3 batch will show their effect.
+What this points to: the model is poor at reporting numbers and at turning them into a verdict, which are exactly the parts code can do. Both improvements are now in (guardrails 5 and 6 above): a check that flags a verdict contradicted by the measured numbers, and the loop stating the measured rates itself. The V3 batch below shows their effect.
+
+### Prompt V3 batch (10 runs)
+
+Prompt `InvestigateV3` with the verdict check and `stateMeasuredRates` on, five runs on the stable control and five on the flaky test, same rubric. The rates are now written by the loop, so the "rates match" row is 10 / 10 by construction; the score counting only what the model wrote is given as well.
+
+| Question | V2 batch (10 runs) | V3 batch (10 runs) |
+|---|---|---|
+| Method finished | 10 / 10 | 9 / 10 (one run flagged `INCOMPLETE`) |
+| Verdict right | 6 / 10 (flaky test 5/5, control 1/5) | 6 / 10 (flaky test 2/5, control 4/5) |
+| Stated rates match `MEASURED` | 2 / 10 | 10 / 10 (stated by the loop) |
+| Evidence traceable | 5 / 10 | 4 / 10 |
+| Cause stated, flaky test | 1 / 5, partly right | 1 / 5, partly right; none matched the key |
+| **Score** | **24 / 50 (48%)** | **29 / 50 (58%)**, or **23 / 50 (46%)** counting only the model's own output |
+
+What it shows:
+
+- **The new check works as a flag.** `INCONSISTENT` fired on all 4 wrong verdicts and on none of the 6 correct ones.
+- **The stated rates fixed the numbers, not the model.** Taking the rates away from the model gained 6 points, all by construction; without them V3 scores slightly below V2. The model's prose still contradicted the measured figures in all five flaky-test runs.
+- **The error moved.** The control improved (4 / 5 stable, up from 1 / 5) and the flaky test got worse (2 / 5, down from 5 / 5). A likely reason is the V3 rule that a test with no failures is stable: the single-test run always shows 0 / 10, and the model seems to trust it over the suite run. This is a reading of five runs per test, not a proven cause.
+- **The cause was never found,** and evidence was no better.
+
+Where this leaves Session 5: the guardrails make runs checkable and the loop reports the facts, but a 3B model cannot be relied on to interpret them. Options for later, none required here: a larger model for comparison, or letting the loop derive the verdict from the measurements.
+

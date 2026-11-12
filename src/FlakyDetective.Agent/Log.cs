@@ -73,4 +73,34 @@ public class Log
             ? "Tools called: none"
             : $"Tools called ({toolsCalled.Count}): {string.Join("; ", toolsCalled)}");
     }
+
+    public static void Measured(IReadOnlyList<string> lines)
+    {
+        foreach (var line in lines)
+        {
+            Console.WriteLine(line);
+        }
+    }
+
+    public static void Nudge(int number, int max, string missing)
+    {
+        Console.WriteLine($"Nudge {number}/{max}: answer not accepted yet. {missing}");
+    }
+
+    // Printed only when the loop gave up with the method unfinished, so such a run cannot pass as clean.
+    public static void Incomplete(string? missing)
+    {
+        if (missing != null)
+        {
+            Console.WriteLine($"INCOMPLETE: the method was not finished. {missing}");
+        }
+    }
+
+    public static void Ungrounded(IReadOnlyList<string> problems)
+    {
+        foreach (var problem in problems)
+        {
+            Console.WriteLine($"UNGROUNDED: {problem}");
+        }
+    }
 }

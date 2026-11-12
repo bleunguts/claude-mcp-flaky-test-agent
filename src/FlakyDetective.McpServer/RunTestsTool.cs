@@ -12,7 +12,9 @@ public class RunTestsTool
     [McpServerTool(Name = "run_test_n_times")]
     [Description("Runs the sandbox tests n times, one run after another, and reports how often each test failed. " +
         "Build the sandbox first. Leave testFilter empty to run the whole suite, " +
-        "or set it to one test name to run only that test.")]
+        "or set it to one test name to run only that test. " +
+        "testSummaries has one entry per test with how many runs passed and failed. " +
+        "runs lists only the runs that did not pass, each with its error message; passed runs are not listed.")]
     public static async Task<BatchRunResult> RunTests(
           [Description("How many times to run the tests, from 1 to 100. Use 10 unless told otherwise.")] int n,
            [Description("Optional. Just the test method name, for example Reset_clears_cache. Do not add a namespace or class. Leave empty to run the whole suite.")] string? testFilter = null)

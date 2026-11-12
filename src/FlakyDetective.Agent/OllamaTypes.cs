@@ -13,8 +13,11 @@ public record OllamaChatRequest(
     [property: JsonPropertyName("stream")] bool Stream,
     [property: JsonPropertyName("options")] OllamaOptions? Options);
 
+// NumPredict caps how many tokens the model may generate in one reply. Without it a model that gets stuck
+// repeating itself runs until the context is full, which on a CPU takes longer than the HTTP timeout.
 public record OllamaOptions(
-    [property: JsonPropertyName("num_ctx")] int NumCtx);
+    [property: JsonPropertyName("num_ctx")] int NumCtx,
+    [property: JsonPropertyName("num_predict")] int? NumPredict = null);
 
 public record OllamaMessage(
     [property: JsonPropertyName("role")] string Role,

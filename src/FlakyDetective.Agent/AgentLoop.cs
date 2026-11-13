@@ -23,6 +23,8 @@ public class AgentLoop
     //                    single-test one). Use with a prompt that does not ask the model for failure rates.
     //   targetTest       the test being fixed. When set, the run ends with an UNVERIFIED line if an edit was applied
     //                    but the runs after it do not prove the fix (Verification.Unproven). Report only.
+    //   executionLog     optional. The loop records every tool call here, so the caller can read what the tools
+    //                    really returned afterwards (the hand-off from investigation to fix reads it).
     public static async Task<AgentResult> RunLoopAsync(
         IModel model,
         McpClient client,
@@ -34,7 +36,8 @@ public class AgentLoop
         Func<string, string?>? answerProblem = null,
         int maxNudges = 3,
         bool stateMeasuredRates = false,
-        string? targetTest = null)
+        string? targetTest = null,
+        List<ToolExecution>? executionLog = null)
     {
         var messages = new List<Message>
         {
@@ -46,7 +49,7 @@ public class AgentLoop
         };
 
         var toolsCalled = new List<string>();
-        var executions = new List<ToolExecution>();
+        var executions = executionLog ?? new List<ToolExecution>();
         var nudges = 0;
 
         // What is still wrong or missing when the model offers an answer: first the method, then the answer.

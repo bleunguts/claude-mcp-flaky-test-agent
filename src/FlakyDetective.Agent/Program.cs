@@ -443,3 +443,48 @@ var repairResult = await AgentLoop.RunLoopAsync(
 Console.WriteLine($"Final result: {repairResult}");
 */
 #endregion
+
+#region 12. Investigate, then fix: the whole chain on a real flaky test (issue #42)
+// WHAT:     Two loop runs in a row. The investigation (prompt V3) examines the test; FixTask turns its answer into the
+//           fix run's task: the file and lines come from what find_test_source really returned (never from the
+//           model's words), and the model's suspected cause is passed on labelled as possibly wrong. Then the fix run
+//           (FixV1, FixMethod) edits the sandbox and the loop makes it run 20 + 20 verification runs.
+// RUN IT:   Remove the /* */, comment out region 7 so it does not also run, and have Ollama running. To try a bigger
+//           model change only the name below (after `ollama pull qwen2.5:7b`): one change at a time.
+// WARNING:  A fix run really edits the file under sandbox/. Afterwards, ALWAYS restore it:
+//             git checkout -- sandbox/
+//           and read the diff the run printed: a test that passes 20 times because its check was weakened is not fixed.
+// OUTPUT:   The investigation log, then "Fix task: ...", then the fix run's log, ending with MEASURED (and UNVERIFIED
+//           if an applied edit is not proven). "Hand-off failed" means no fix was attempted.
+/*
+var e2eTest = "Reset_clears_cache";
+var e2eModelName = "qwen2.5:3b";
+var e2eHttp = new HttpClient { BaseAddress = new Uri("http://localhost:11434"), Timeout = TimeSpan.FromMinutes(10) };
+var e2eModel = new OllamaModel(e2eHttp, e2eModelName, 8192);
+
+var investigationCalls = new List<ToolExecution>();
+var investigation = await AgentLoop.RunLoopAsync(
+    e2eModel, client, toolDefinitions, $"Investigate the test {e2eTest}.", 12, Prompts.InvestigateV3,
+    nextMissingStep: InvestigationMethod.NextMissingStep,
+    answerProblem: InvestigationMethod.AnswerProblem,
+    stateMeasuredRates: true,
+    executionLog: investigationCalls);
+
+var fixTask = FixTask.From(investigationCalls, investigation.Text, e2eTest);
+if (fixTask == null)
+{
+    Console.WriteLine("Hand-off failed: find_test_source did not give one place for the test, so no fix was attempted.");
+}
+else
+{
+    Console.WriteLine($"Fix task: {fixTask}");
+    var fixCalls = new List<ToolExecution>();
+    var fixRun = await AgentLoop.RunLoopAsync(
+        e2eModel, client, toolDefinitions, fixTask, 16, Prompts.FixV1,
+        nextMissingStep: calls => FixMethod.NextMissingStep(calls, e2eTest),
+        targetTest: e2eTest,
+        executionLog: fixCalls);
+    Console.WriteLine($"Final result: {fixRun}");
+}
+*/
+#endregion

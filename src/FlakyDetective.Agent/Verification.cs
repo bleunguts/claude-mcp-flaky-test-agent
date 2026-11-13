@@ -15,6 +15,35 @@ public static class Verification
 {
     public const int MinRuns = 20;
 
+    // What a human needs to judge a fix: the path and diff of every edit that was really written, in order, taken
+    // from the edit_source results. Dry runs and refused edits are not included.
+    public static List<string> AppliedDiffs(IReadOnlyList<ToolExecution> executions)
+    {
+        var diffs = new List<string>();
+        foreach (var e in executions)
+        {
+            if (e.Name != "edit_source" || !e.Succeeded || !(e.Input.TryGetValue("apply", out var apply) && IsApply(apply)))
+            {
+                continue;
+            }
+
+            try
+            {
+                using var document = JsonDocument.Parse(e.Result);
+                var root = document.RootElement;
+                var path = root.TryGetProperty("path", out var p) && p.ValueKind == JsonValueKind.String ? p.GetString() : "(unknown file)";
+                var diff = root.TryGetProperty("diff", out var d) && d.ValueKind == JsonValueKind.String ? d.GetString() : "";
+                diffs.Add($"{path}{Environment.NewLine}{diff}");
+            }
+            catch (JsonException)
+            {
+                // a result that is not JSON has no diff to show
+            }
+        }
+
+        return diffs;
+    }
+
     // For the end of a run: null when there is nothing to flag, otherwise what is wrong. An edit that was applied
     // but is not proven (not enough runs, or the test still fails) is flagged. No applied edit means no fix was
     // tried, so there is nothing to flag. Report only, like VerdictCheck.

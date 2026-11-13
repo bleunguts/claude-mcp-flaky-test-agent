@@ -105,6 +105,22 @@ public class Log
         }
     }
 
+    // Every edit that was really written to the sandbox, so a human can read what the agent changed. A fix that
+    // passes because its check was weakened is not a fix, and the pass rate cannot tell the difference.
+    public static void AppliedEdits(IReadOnlyList<string> diffs)
+    {
+        if (diffs.Count == 0)
+        {
+            Console.WriteLine("APPLIED EDITS: none");
+            return;
+        }
+
+        for (var i = 0; i < diffs.Count; i++)
+        {
+            Console.WriteLine($"APPLIED EDIT {i + 1} of {diffs.Count}: {diffs[i].TrimEnd()}");
+        }
+    }
+
     // A fix was applied to the sandbox but the runs after it do not prove it.
     public static void Unverified(string? problem)
     {

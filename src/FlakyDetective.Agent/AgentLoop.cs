@@ -177,6 +177,7 @@ public class AgentLoop
         if (targetTest != null)
         {
             Log.Unverified(Verification.Unproven(executions, targetTest));
+            Log.AppliedEdits(Verification.AppliedDiffs(executions));
         }
 
         // Follow-up 2: the loop states the measured figures itself, in its own words and after the model's answer,

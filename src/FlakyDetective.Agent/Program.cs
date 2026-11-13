@@ -385,4 +385,61 @@ Console.WriteLine($"Final result: {guardrailResult}");
 */
 #endregion
 
+#region 10. The fix phase: edit the source, run it again, see if it passes
+// WHAT:     A second loop run, after an investigation. The model reads the test, proposes one edit (shown as a dry
+//           run first), applies it, and the loop makes it run the test alone and the whole suite 20 times each.
+//           FixMethod enforces that order. Verification decides whether the fix is proven, not the model:
+//           the run ends with the MEASURED figures and an UNVERIFIED line if an applied edit is not proven.
+// RUN IT:   Remove the /* */, and comment out region 7 so it does not also run. Needs Ollama running. Region 9 and 11 are
+//           already commented out; leave them so. To give the model something to fix, invert the assertion in
+//           Mid_is_positive by hand first (Is.GreaterThan(0) to Is.LessThan(0)).
+// WARNING:  An applied edit really changes the file under sandbox/. Put it back afterwards:
+//             git checkout -- sandbox/
+//           The sandbox is the test bed for every scored run, so never leave an edit in place.
+// NOTE:     run_test_n_times builds the sandbox once per call, so the 20 runs test the edited code.
 
+/*
+var fixHttp = new HttpClient { BaseAddress = new Uri("http://localhost:11434"), Timeout = TimeSpan.FromMinutes(5) };
+var fixModel = new OllamaModel(fixHttp, "qwen2.5:3b", 8192);
+var fixTarget = "Mid_is_positive";   // the test to fix
+var fixResult = await AgentLoop.RunLoopAsync(
+    fixModel, client, toolDefinitions,
+    $"Fix the test {fixTarget}. Its source is in sandbox/FlakyLab/FlakyLabTests.cs, lines 62 to 67.",
+    16, Prompts.FixV1,
+    nextMissingStep: calls => FixMethod.NextMissingStep(calls, fixTarget),
+    targetTest: fixTarget);
+Console.WriteLine($"Final result: {fixResult}");
+
+*/
+#endregion
+
+#region 11. The fix phase with a scripted model: break the control, repair it, prove it
+// WHAT:     The whole fix phase end to end with no LLM, so the result is deterministic. The region first breaks
+//           Mid_is_positive on purpose (inverts its assertion) using the same edit_source tool the agent uses.
+//           A scripted model then repairs it: dry run, one applied edit, 20 runs of the test alone and 20 of the
+//           whole suite. FixMethod enforces that order, and Verification decides whether the repair is proven.
+// RUN IT:   Remove the /* */, and comment out regions 7, 9 and 10 so they do not also run. Needs only the solution built.
+// EXPECTED: ... the 40 runs, then the answer, then "MEASURED Mid_is_positive: alone 0/20 failed; in the suite 0/20
+//           failed" and no UNVERIFIED line. The repair itself puts the sandbox back, so nothing is left behind.
+// IF IT STOPS EARLY: the control may still be broken. Put it back with:  git checkout -- sandbox/
+// LESSON:   This proves the pipeline (edit, rebuild, 20 + 20 runs, verification) works. Whether a real model can
+//           produce the edit is a separate question: in region 10 the 3B model could not copy the source exactly.
+/*
+var breakResult = await client.CallToolAsync("edit_source", new Dictionary<string, object?>
+{
+    ["path"] = "sandbox/FlakyLab/FlakyLabTests.cs",
+    ["oldText"] = GuardrailScripts.OriginalAssertion,
+    ["newText"] = GuardrailScripts.BrokenAssertion,
+    ["apply"] = true
+});
+Console.WriteLine("Control broken on purpose: " + string.Join("", breakResult.Content.OfType<ModelContextProtocol.Protocol.TextContentBlock>().Select(b => b.Text)));
+
+var repairResult = await AgentLoop.RunLoopAsync(
+    GuardrailScripts.RepairBrokenControl(), client, toolDefinitions,
+    "Fix the test Mid_is_positive.", 12, Prompts.FixV1,
+    nextMissingStep: calls => FixMethod.NextMissingStep(calls, "Mid_is_positive"),
+    stateMeasuredRates: true,
+    targetTest: "Mid_is_positive");
+Console.WriteLine($"Final result: {repairResult}");
+*/
+#endregion

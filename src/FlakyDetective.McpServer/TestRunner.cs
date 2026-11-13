@@ -39,6 +39,21 @@ public class TestRunner
         }
         Directory.CreateDirectory(trxFolder);
 
+        // Build once before the runs. The runs use --no-build, so without this an edit to the source would never be
+        // tested: every run would execute the dll built earlier. An up-to-date build costs a few seconds, once per call.
+        var build = await BuildSandboxAsync(workingFolder);
+        if (build.ExitCode != 0)
+        {
+            var errors = build.stdout.Split('\n').Where(l => l.Contains("error ")).Take(5).Select(l => l.Trim());
+            return new BatchRunResult(
+                Requested: n,
+                Completed: 0,
+                Error: "Build failed, no tests were run. " + string.Join(" ", errors),
+                TestFilter: testFilter,
+                Runs: [],
+                TestSummaries: []);
+        }
+
         int runsCompleted = 0;
         var allTrxResults = new List<RunResult>();  
         var processResults = new List<ProcessResult>(); 
@@ -145,6 +160,30 @@ public class TestRunner
     private static string ToTrxFilename(int runNumber)
     {
         return $"run{runNumber}.trx";
+    }
+
+    public static async Task<ProcessResult> BuildSandboxAsync(string workingFolder)
+    {
+        var processStartInfo = new ProcessStartInfo
+        {
+            FileName = "dotnet",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            WorkingDirectory = workingFolder
+        };
+        processStartInfo.ArgumentList.Add("build");
+        processStartInfo.ArgumentList.Add("sandbox/FlakyLab");
+        processStartInfo.ArgumentList.Add("--nologo");
+        processStartInfo.ArgumentList.Add("-v");
+        processStartInfo.ArgumentList.Add("q");
+
+        using var process = new Process { StartInfo = processStartInfo };
+        process.Start();
+        var stdOutTask = process.StandardOutput.ReadToEndAsync();
+        var stdErrTask = process.StandardError.ReadToEndAsync();
+        await process.WaitForExitAsync();
+        return new ProcessResult(process.ExitCode, await stdOutTask, await stdErrTask, null);
     }
 
     public static async Task<ProcessResult> RunTestsAsync(string workingFolder, string trxFolder, int runNumber, string? testFilter)

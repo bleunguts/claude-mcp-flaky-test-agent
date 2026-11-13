@@ -94,7 +94,7 @@ for i in {1..10}; do dotnet test sandbox/FlakyLab --nologo -v q | tail -1; done
 
 The design question was how to let Claude reason about uncertainty. A test that fails about 10% of the time passes 5 reruns about 59% of the time (0.9⁵), and batches of 10 runs vary noticeably: the same test gave 1 failure in one batch and 3 in the next. The result therefore carries run counts and rates, so the caller can decide to ask for more runs.
 
-Known limitation: the tool uses `--no-build`, so the sandbox must be built beforehand (stated in the tool description). A stale build produces results for old code.
+The tool builds the sandbox once per call and then runs the tests with `--no-build` (added in the fix phase, #40). Before that the sandbox had to be built beforehand, and a stale build produced results for old code, which would have hidden any edit.
 
 ## Session 3: reading the code
 
@@ -286,3 +286,19 @@ What it shows:
 
 Where this leaves Session 5: the guardrails make runs checkable and the loop reports the facts, but a 3B model cannot be relied on to interpret them. Options for later, none required here: a larger model for comparison, or letting the loop derive the verdict from the measurements.
 
+## Session 6 follow-up: the fix phase (#40)
+
+Session 6 built the parts that make a fix safe and checkable; this wires them into a second loop run. A human still decides what happens to a fix: there is no PR tool.
+
+- **`FixV1` and `FixMethod`.** A separate run after the investigation, with its own prompt. `FixMethod.NextMissingStep` makes the loop enforce the order: `edit_source` as a dry run, one applied edit, then 20 runs of the test alone and 20 of the whole suite, taken after that edit (`Verification.Check` works out which runs count). A fix that still fails is a finished method: the honest answer is "this did not work".
+- **The 20 runs must test the edited code.** `run_test_n_times` used `--no-build`, so after an edit it would have measured the old binary. It now builds the sandbox once per call, and returns the compile errors if the build fails.
+- **`edit_source` uses the file's own line ending.** The sandbox files are LF; the model's `
+` is converted to whatever the file uses, so a multi-line edit matches and the diff reports the right line.
+- **A scripted end-to-end proof (region 11 of `Program.cs`).** The control `Mid_is_positive` is broken on purpose (assertion inverted) with the same tool, and a scripted model repairs it: dry run, one applied edit, 20 + 20 runs. Result: `MEASURED Mid_is_positive: alone 0/20 failed; in the suite 0/20 failed`, no `UNVERIFIED` line, and the repair puts the sandbox back. This proves the pipeline; it says nothing about whether a model can produce the edit. It diagnoses no flaky test.
+- **Live attempts with `qwen2.5:3b` (region 10).** *First try, control intact:* the model read the real source, then tried to edit code it had made up, so `edit_source` refused three times and nothing was written; the run was flagged `INCOMPLETE` and the sandbox was untouched. *Second try, control broken by hand (assertion inverted):* the model read the source, proposed the one-line edit (copied exactly, so it matched), applied it, and the loop's three nudges (propose, verify alone, verify the suite) carried it through the 20 + 20 runs: `MEASURED Mid_is_positive: alone 0/20 failed; in the suite 0/20 failed`, no `UNVERIFIED`, and the sandbox ended identical to the original. Two runs prove little, and this repaired a deliberate break, not a flaky test. The model's own write-up was unreliable (it said the other tests showed no failures, when several failed in the suite); only the measured line can be trusted.
+
+Known limitations:
+
+- A small model has to reproduce `oldText` exactly. It managed a single line it had just read and failed on text it made up. A line-range edit, or quoting the real lines in the nudge, would help; neither is built.
+- Verification uses the latest batch per scope, so a model that re-runs after a failed batch could pass on a lucky one. At 20 runs this is unlikely, not impossible.
+- An applied edit changes the test bed. Restore it with `git checkout -- sandbox/`.

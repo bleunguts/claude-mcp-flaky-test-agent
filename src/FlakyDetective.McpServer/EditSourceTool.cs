@@ -1,7 +1,6 @@
 ﻿using ModelContextProtocol.Server;
 using System.ComponentModel;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace FlakyDetective.McpServer;
 
@@ -37,11 +36,6 @@ public class EditSourceTool
             return Fail(path, "oldText cannot be empty");
         }
 
-        // The model sends line breaks as \n, the files use Environment.NewLine (Windows only).
-        // Convert to \n first so an existing \r\n does not become \r\r\n.
-        oldText = oldText.Replace("\r\n", "\n").Replace("\n", Environment.NewLine);
-        newText = newText.Replace("\r\n", "\n").Replace("\n", Environment.NewLine);
-
         if (!File.Exists(fullPath))
         {
             return Fail(path, "file not found");
@@ -53,6 +47,13 @@ public class EditSourceTool
         }
 
         var sourceCode = File.ReadAllText(fullPath);
+
+        // The model sends line breaks as \n. Use the file's own line ending (this repo's files are LF, others may be
+        // CRLF). Convert to \n first so an existing \r\n does not become \r\r\n.
+        var lineEnding = sourceCode.Contains("\r\n") ? "\r\n" : "\n";
+        oldText = oldText.Replace("\r\n", "\n").Replace("\n", lineEnding);
+        newText = newText.Replace("\r\n", "\n").Replace("\n", lineEnding);
+
         int firstIndex = sourceCode.IndexOf(oldText, 0, StringComparison.Ordinal);
         if (firstIndex == -1)
         {
@@ -80,21 +81,19 @@ public class EditSourceTool
     {        
         var diff = new StringBuilder();
         
-        //var count = sourceCode.AsSpan(0, firstIndex).Count("\n");
-        // linenumber of first change: count newlines before firstIndex                
-        var matches = Regex.Matches(sourceCode.Substring(0, firstIndex), Environment.NewLine);
-        int lineNumber = matches.Count + 1;
+        // line number of the first change: count the line feeds before it (the same for LF and CRLF files)
+        int lineNumber = sourceCode.AsSpan(0, firstIndex).Count('\n') + 1;
 
         diff.AppendLine($"line {lineNumber}");
         // prefix oldText lines with -
-        foreach (var old in oldText.Split(Environment.NewLine))
+        foreach (var old in oldText.Split('\n'))
         {
-            diff.AppendLine($"- {old}");
+            diff.AppendLine($"- {old.TrimEnd('\r')}");
         }
         // prefix newText lines with +
-        foreach (var @new in newText.Split(Environment.NewLine))
+        foreach (var @new in newText.Split('\n'))
         {
-            diff.AppendLine($"+ {@new}");
+            diff.AppendLine($"+ {@new.TrimEnd('\r')}");
         }
 
         return diff;

@@ -114,6 +114,49 @@ public class EditSourceToolTests
         Assert.That(Read(Target), Is.EqualTo("one\r\nA\r\nB\r\nC\r\nfour\r\n"));
     }
 
+    // This repo's own files are LF. The text keeps the file's line ending, whatever the model sent.
+    [Test]
+    public void Multi_line_text_matches_an_lf_file_and_keeps_lf()
+    {
+        Write(Target, "one\ntwo\nthree\nfour\n");
+
+        var result = EditSourceTool.Edit(_root, Target, "two\nthree", "A\nB\nC", apply: true);
+
+        Assert.That(result.Error, Is.Null);
+        Assert.That(Read(Target), Is.EqualTo("one\nA\nB\nC\nfour\n"));
+    }
+
+    [Test]
+    public void Multi_line_text_sent_as_crlf_matches_an_lf_file_and_keeps_lf()
+    {
+        Write(Target, "one\ntwo\nthree\n");
+
+        EditSourceTool.Edit(_root, Target, "two\r\nthree", "X\r\nY", apply: true);
+
+        Assert.That(Read(Target), Is.EqualTo("one\nX\nY\n"));
+    }
+
+    [Test]
+    public void The_diff_names_the_right_line_in_an_lf_file()
+    {
+        Write(Target, "one\ntwo\nthree\nfour\n");
+
+        var result = EditSourceTool.Edit(_root, Target, "three", "3", apply: false);
+
+        Assert.That(result.Diff, Does.StartWith("line 3"));
+    }
+
+    [Test]
+    public void The_diff_of_a_multi_line_change_in_an_lf_file_has_one_row_per_line()
+    {
+        Write(Target, "one\ntwo\nthree\nfour\n");
+
+        var result = EditSourceTool.Edit(_root, Target, "two\nthree", "A\nB\nC", apply: false);
+
+        var rows = result.Diff.Split(Environment.NewLine, StringSplitOptions.RemoveEmptyEntries);
+        Assert.That(rows, Is.EqualTo(new[] { "line 2", "- two", "- three", "+ A", "+ B", "+ C" }));
+    }
+
     [Test]
     public void Multi_line_text_that_already_uses_crlf_is_not_doubled()
     {

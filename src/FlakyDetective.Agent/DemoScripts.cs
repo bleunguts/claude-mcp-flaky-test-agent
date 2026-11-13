@@ -208,6 +208,32 @@ public static class GuardrailScripts
         messages => Script.Finish("Test: Mid_is_positive\nVerdict: flaky\nSuspected cause: unknown\nConfidence: low"),
     ]);
 
+    // The fix phase, end to end, with no LLM. Mid_is_positive has been broken on purpose (its assertion inverted, see
+    // region 11 of Program.cs), and this script puts the original assertion back: a dry run, one applied edit, then 20
+    // runs of the test alone and 20 of the whole suite, which is the order FixMethod enforces. This restores a
+    // deliberately broken control. It diagnoses nothing about any flaky test.
+    public const string BrokenAssertion = "Assert.That(mid, Is.LessThan(0));";
+    public const string OriginalAssertion = "Assert.That(mid, Is.GreaterThan(0));";
+
+    public static ScriptedModel RepairBrokenControl()
+    {
+        Dictionary<string, object?> Edit(bool apply) => new()
+        {
+            ["path"] = "sandbox/FlakyLab/FlakyLabTests.cs",
+            ["oldText"] = BrokenAssertion,
+            ["newText"] = OriginalAssertion,
+            ["apply"] = apply
+        };
+
+        return new ScriptedModel([
+            messages => Script.CallTool("call_1", "edit_source", Edit(false)),
+            messages => Script.CallTool("call_2", "edit_source", Edit(true)),
+            messages => Script.CallTool("call_3", "run_test_n_times", new Dictionary<string, object?> { { "n", 20 }, { "testFilter", "Mid_is_positive" } }),
+            messages => Script.CallTool("call_4", "run_test_n_times", new Dictionary<string, object?> { { "n", 20 } }),
+            messages => Script.Finish(string.Join(Environment.NewLine, "Test: Mid_is_positive", "Change: restored the assertion that was inverted.")),
+        ]);
+    }
+
     // Runs the whole suite once, then lists a failed run of Mid_is_positive that no tool reported (it never fails).
     // This is the model relabelling another test's failures. Use with no required steps; expect an UNGROUNDED line.
     public static ScriptedModel RelabelledFailure() => new ScriptedModel([

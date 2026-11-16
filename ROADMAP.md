@@ -341,3 +341,17 @@ What changed with the bigger model:
 - **Neither model reached a proven fix**, and the pass rate alone could not have told a real fix from a loophole, which is why each applied diff is saved for a human to read.
 - **An idea, not built:** make `edit_source` report the lines where an ambiguous text occurs, so the model has something concrete to add context from. It is a separate variable and would be tested as one.
 
+
+### 7B after #44 (ambiguous-match lines, 6 nudges)
+
+#44 made `edit_source` list the lines of an ambiguous match and gave the fix run 6 nudges instead of 3. Same 5 attempts, same model.
+
+| Outcome | `qwen2.5:7b` before #44 | `qwen2.5:7b` after #44 |
+|---|---|---|
+| Verified and legitimate | 0 | 0 |
+| Edit applied, not proven (`UNVERIFIED`, `Failed`) | 1 | 3 |
+| Refused or incomplete, nothing applied | 4 | 2 |
+
+- More attempts now apply an edit and reach verification, so the ambiguity loop was a real blocker, and the hint helped.
+- None of the applied edits fixed the test. Two added a `Task.Delay(25)` (the test passes alone, the suite still fails 9 to 10 of 20); one broke the build. The suite check caught all three.
+- **Conclusion:** the remaining blocker is diagnosis, not tooling. The hand-off cause was vague ("race conditions or other factors") and a 7B model cannot work out the real cause by itself. The next experiment needs a stronger model (Claude through `AnthropicModel`, which needs API credits). Local models above 7B do not fit this laptop (16 GB, CPU only).

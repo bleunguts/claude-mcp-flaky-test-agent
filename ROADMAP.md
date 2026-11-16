@@ -355,3 +355,15 @@ What changed with the bigger model:
 - More attempts now apply an edit and reach verification, so the ambiguity loop was a real blocker, and the hint helped.
 - None of the applied edits fixed the test. Two added a `Task.Delay(25)` (the test passes alone, the suite still fails 9 to 10 of 20); one broke the build. The suite check caught all three.
 - **Conclusion:** the remaining blocker is diagnosis, not tooling. The hand-off cause was vague ("race conditions or other factors") and a 7B model cannot work out the real cause by itself. The next experiment needs a stronger model (Claude through `AnthropicModel`, which needs API credits). Local models above 7B do not fit this laptop (16 GB, CPU only).
+
+### Claude through the MCP tools (manual proof, Pro plan)
+
+A Claude session (Sonnet) was given the same MCP server and a prompt that mirrors the agent's method, with a human approving the dry run. This is a proof of concept, not an agent result: the loop was the chat, not `AgentLoop`.
+
+- Before: `Reset_clears_cache` failed 6 of 10 in the suite and 0 of 10 alone.
+- Edit (one, applied after a dry run the human read): add `[NonParallelizable]` to the test. The assertion and the delay are unchanged.
+- After: 0 of 20 alone and 0 of 20 in the suite. `Writer_sets_eurusd` (4 of 10 before) also stopped failing without being touched.
+- The suspected cause (tests sharing the static `RateCache` and overlapping) was inferred from the failures; the code was not read to confirm it.
+- Other flaky tests were not touched; their rates are unchanged within the noise.
+- **Conclusion:** the tools and the 20 + 20 check work with a model that can reason about the cause. The `qwen2.5` limit is the model, not the design.
+- The sandbox was restored with `git checkout -- sandbox/`.

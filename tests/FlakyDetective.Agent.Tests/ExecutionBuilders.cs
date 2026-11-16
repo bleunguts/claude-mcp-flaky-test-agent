@@ -50,5 +50,15 @@ internal static class ExecutionBuilders
         return new ToolExecution("run_test_n_times", input, result, false);
     }
 
+    // What find_test_source returns: the file and line range of the test (one entry per match).
+    public static ToolExecution Find(string test, string file = "sandbox/FlakyLab/FlakyLabTests.cs", int start = 83, int end = 89, int matches = 1, bool failed = false)
+    {
+        var entries = string.Join(",", Enumerable.Range(0, matches).Select(_ => $"{{\"file\":\"{file}\",\"startLine\":{start},\"endLine\":{end}}}"));
+        var result = failed
+            ? $"{{\"testName\":\"{test}\",\"matches\":[],\"error\":\"no test named {test}\"}}"
+            : $"{{\"testName\":\"{test}\",\"matches\":[{entries}]}}";
+        return new ToolExecution("find_test_source", new Dictionary<string, object?> { ["testName"] = test }, result, false);
+    }
+
     public static JsonElement Json(string json) => JsonDocument.Parse(json).RootElement;
 }

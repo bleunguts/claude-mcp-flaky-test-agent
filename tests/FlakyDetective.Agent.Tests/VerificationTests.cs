@@ -193,6 +193,31 @@ public class VerificationTests
         Assert.That(result.State, Is.EqualTo(VerificationState.Passed));
     }
 
+    // ---- AppliedDiffs: what a human reads to judge a fix ----
+
+    [Test]
+    public void AppliedDiffs_is_empty_without_an_applied_edit()
+    {
+        Assert.That(Verification.AppliedDiffs([Suite(20, 0), Edit(false), Edit(true, failed: true)]), Is.Empty);
+    }
+
+    [Test]
+    public void AppliedDiffs_lists_the_path_and_diff_of_each_applied_edit_in_order()
+    {
+        var diffs = Verification.AppliedDiffs([Edit(false), Edit(true), Suite(20, 0), Edit("true")]);
+
+        Assert.That(diffs, Has.Count.EqualTo(2));
+        Assert.That(diffs[0], Does.Contain("sandbox/FlakyLab/FlakyLabTests.cs").And.Contain("line 1"));
+    }
+
+    [Test]
+    public void AppliedDiffs_ignores_a_result_that_is_not_json()
+    {
+        var odd = new ToolExecution("edit_source", new Dictionary<string, object?> { ["apply"] = true }, "not json", false);
+
+        Assert.That(Verification.AppliedDiffs([odd]), Is.Empty);
+    }
+
     // ---- Unproven: what the loop prints at the end of a run ----
 
     [Test]

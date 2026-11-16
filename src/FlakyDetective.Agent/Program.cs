@@ -256,15 +256,20 @@ Console.WriteLine("=============================================================
 var liveHttp = new HttpClient { BaseAddress = new Uri("http://localhost:11434"), Timeout = TimeSpan.FromMinutes(5) };
 var liveModel = new OllamaModel(liveHttp, "qwen2.5:3b", 8192);
 
-string livePrompt = args.Length > 0 ? string.Join(" ", args) : "Investigate the test Mid_is_positive.";
-Console.WriteLine($"Prompt: {livePrompt}");
+// FLAKYLAB_MODE=fix runs region 12 (investigate, then fix) instead of this plain investigation.
+var fixMode = Environment.GetEnvironmentVariable("FLAKYLAB_MODE") == "fix";
+if (!fixMode)
+{
+    string livePrompt = args.Length > 0 ? string.Join(" ", args) : "Investigate the test Mid_is_positive.";
+    Console.WriteLine($"Prompt: {livePrompt}");
 
-var liveResult = await AgentLoop.RunLoopAsync(
-    liveModel, client, toolDefinitions, livePrompt, 12, Prompts.InvestigateV3,
-    nextMissingStep: InvestigationMethod.NextMissingStep,
-    answerProblem: InvestigationMethod.AnswerProblem,
-    stateMeasuredRates: true);   // V3 does not ask the model for rates: the loop appends what the tools measured
-Console.WriteLine($"Final result: {liveResult}");
+    var liveResult = await AgentLoop.RunLoopAsync(
+        liveModel, client, toolDefinitions, livePrompt, 12, Prompts.InvestigateV3,
+        nextMissingStep: InvestigationMethod.NextMissingStep,
+        answerProblem: InvestigationMethod.AnswerProblem,
+        stateMeasuredRates: true);   // V3 does not ask the model for rates: the loop appends what the tools measured
+    Console.WriteLine($"Final result: {liveResult}");
+}
 #endregion
 
 #region 8. The live run with Claude through the Anthropic API (issue #27)
@@ -442,4 +447,56 @@ var repairResult = await AgentLoop.RunLoopAsync(
     targetTest: "Mid_is_positive");
 Console.WriteLine($"Final result: {repairResult}");
 */
+#endregion
+
+#region 12. Investigate, then fix: the whole chain on a real flaky test (issue #42)
+// WHAT:     Two loop runs in a row. The investigation (prompt V3) examines the test; FixTask turns its answer into the
+//           fix run's task: the file and lines come from what find_test_source really returned (never from the
+//           model's words), and the model's suspected cause is passed on labelled as possibly wrong. Then the fix run
+//           (FixV1, FixMethod) edits the sandbox and the loop makes it run 20 + 20 verification runs.
+// RUN IT:   Set environment variables, no code change. Needs Ollama running. For several attempts with the sandbox
+//           restored after each one, use the script instead:
+//             .\scripts\run_fix_n_times.ps1 -Test Reset_clears_cache -Model qwen2.5:3b -Runs 5
+//           By hand (PowerShell):
+//             $env:FLAKYLAB_MODE = "fix"; $env:FLAKYLAB_TEST = "Reset_clears_cache"; $env:FLAKYLAB_MODEL = "qwen2.5:3b"
+//             dotnet run --project src/FlakyDetective.Agent --no-build
+//           FLAKYLAB_TEST defaults to Reset_clears_cache and FLAKYLAB_MODEL to qwen2.5:3b. Changing only the model name
+//           (after `ollama pull qwen2.5:7b`) keeps a comparison fair.
+// WARNING:  A fix run really edits the file under sandbox/. By hand, ALWAYS restore it afterwards:
+//             git checkout -- sandbox/
+//           and read the "APPLIED EDIT" diff the run printed: a test that passes 20 times because its check was
+//           weakened is not fixed, and the pass rate cannot tell the difference.
+// OUTPUT:   The investigation log, then "Fix task: ...", then the fix run's log, ending with MEASURED, UNVERIFIED (if an
+//           applied edit is not proven) and the APPLIED EDIT diffs. "Hand-off failed" means no fix was attempted.
+if (fixMode)
+{
+    var e2eTest = Environment.GetEnvironmentVariable("FLAKYLAB_TEST") ?? "Reset_clears_cache";
+    var e2eModelName = Environment.GetEnvironmentVariable("FLAKYLAB_MODEL") ?? "qwen2.5:3b";
+    Console.WriteLine($"Fix mode: test {e2eTest}, model {e2eModelName}");
+    var e2eHttp = new HttpClient { BaseAddress = new Uri("http://localhost:11434"), Timeout = TimeSpan.FromMinutes(10) };
+    var e2eModel = new OllamaModel(e2eHttp, e2eModelName, 8192);
+
+    var investigationCalls = new List<ToolExecution>();
+    var investigation = await AgentLoop.RunLoopAsync(
+        e2eModel, client, toolDefinitions, $"Investigate the test {e2eTest}.", 12, Prompts.InvestigateV3,
+        nextMissingStep: InvestigationMethod.NextMissingStep,
+        answerProblem: InvestigationMethod.AnswerProblem,
+        stateMeasuredRates: true,
+        executionLog: investigationCalls);
+
+    var fixTask = FixTask.From(investigationCalls, investigation.Text, e2eTest);
+    if (fixTask == null)
+    {
+        Console.WriteLine("Hand-off failed: find_test_source did not give one place for the test, so no fix was attempted.");
+    }
+    else
+    {
+        Console.WriteLine($"Fix task: {fixTask}");
+        var fixRun = await AgentLoop.RunLoopAsync(
+            e2eModel, client, toolDefinitions, fixTask, 16, Prompts.FixV1,
+            nextMissingStep: calls => FixMethod.NextMissingStep(calls, e2eTest),
+            targetTest: e2eTest);
+        Console.WriteLine($"Final result: {fixRun}");
+    }
+}
 #endregion

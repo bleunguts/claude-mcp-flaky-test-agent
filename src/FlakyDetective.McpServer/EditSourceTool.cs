@@ -62,7 +62,13 @@ public class EditSourceTool
         int secondIndex = sourceCode.IndexOf(oldText, firstIndex + oldText.Length, StringComparison.Ordinal);
         if (secondIndex != -1)
         {
-            return Fail(path, "oldText found multiple times in file, please provide more surrounding text");
+            // Say where the matches are, so the caller can add the lines around the one it means.
+            var lines = new List<int>();
+            for (var at = firstIndex; at != -1 && lines.Count < 10; at = sourceCode.IndexOf(oldText, at + oldText.Length, StringComparison.Ordinal))
+            {
+                lines.Add(sourceCode.AsSpan(0, at).Count((char)10) + 1);
+            }
+            return Fail(path, $"oldText found multiple times in file, at lines {string.Join(", ", lines)}. Include one or more neighbouring lines in oldText so that only one place matches.");
         }
         // build the result 
         var newSource = sourceCode[..firstIndex] + newText + sourceCode[(firstIndex + oldText.Length)..];

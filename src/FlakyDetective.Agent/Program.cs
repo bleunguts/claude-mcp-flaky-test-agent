@@ -495,7 +495,8 @@ if (fixMode)
         var fixRun = await AgentLoop.RunLoopAsync(
             e2eModel, client, toolDefinitions, fixTask, 16, Prompts.FixV1,
             nextMissingStep: calls => FixMethod.NextMissingStep(calls, e2eTest),
-            targetTest: e2eTest);
+            targetTest: e2eTest,
+            maxNudges: 6);
         Console.WriteLine($"Final result: {fixRun}");
     }
 }

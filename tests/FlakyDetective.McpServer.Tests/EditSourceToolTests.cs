@@ -189,6 +189,16 @@ public class EditSourceToolTests
     }
 
     [Test]
+    public void The_multiple_match_error_lists_the_lines_of_every_match()
+    {
+        Write(Target, "same\nother\nsame\nother\nsame\n");
+
+        var result = EditSourceTool.Edit(_root, Target, "same", "x", apply: true);
+
+        Assert.That(result.Error, Does.Contain("lines 1, 3, 5").And.Contain("neighbouring"));
+    }
+
+    [Test]
     public void Refuses_empty_old_text()
     {
         var result = EditSourceTool.Edit(_root, Target, "", "x", apply: true);

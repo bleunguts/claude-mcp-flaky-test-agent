@@ -302,3 +302,42 @@ Known limitations:
 - A small model has to reproduce `oldText` exactly. It managed a single line it had just read and failed on text it made up. A line-range edit, or quoting the real lines in the nudge, would help; neither is built.
 - Verification uses the latest batch per scope, so a model that re-runs after a failed batch could pass on a lucky one. At 20 runs this is unlikely, not impossible.
 - An applied edit changes the test bed. Restore it with `git checkout -- sandbox/`.
+
+## Fix flaky tests end to end (#42): the 3B baseline
+
+The whole chain on a real flaky test: investigation, then `FixTask` hands the located source and the model's suspected cause (labelled possibly wrong) to the fix run, which edits the sandbox and must verify with 20 + 20 runs. `scripts/run_fix_n_times.ps1` runs it N times, saves each log and the `git diff` of what changed under `sandbox/`, and restores the sandbox after every attempt (it refuses to start on a dirty sandbox and stops if a restore fails). `FLAKYLAB_MODE=fix` selects the chain in `Program.cs`; the test and model come from `FLAKYLAB_TEST` and `FLAKYLAB_MODEL`.
+
+First batch: `qwen2.5:3b`, 5 attempts on `Reset_clears_cache`, prompts V3 and `FixV1`, code unchanged between attempts, about 7 minutes each.
+
+| Outcome | Attempts (of 5) |
+|---|---|
+| Verified and legitimate | 0 |
+| Verified but a loophole | 0 |
+| Edit applied, not proven (`UNVERIFIED`) | 1 |
+| Refused or incomplete, nothing applied | 4 |
+
+A sixth attempt was cut off when the laptop slept (Ollama dropped the connection) and is not counted; the batch was restarted from the beginning. The saved evidence of that attempt is kept separately.
+
+What it shows:
+
+- **The model could not reproduce the text to replace.** In four attempts `edit_source` refused every edit ("oldText not found", or a wrong path); only attempt 5 copied a line exactly, after reading the source again.
+- **The nudge budget ran out.** Each loop run allows 3 nudges, and failed edits plus the "apply" and "verify" prompts used them up. In attempt 5 the edit was applied and the loop then let the run end, flagged `INCOMPLETE` and `UNVERIFIED`, before any run after the edit. A higher limit might have let it finish; that is a guess, untested, and a second variable to change separately.
+- **The one applied edit was not a fix.** It rewrote the assertion into an equivalent check. A `MEASURED` line in that log (`alone 0/20`) came from a run made before the edit, so it proves nothing about the change.
+- **The investigation's input was weak.** Two hand-offs said the test passes consistently or is not flaky while the suite had measured 3 to 7 failures out of 10; the others passed on a vague guess.
+
+Second batch: `qwen2.5:7b`, the same 5 attempts with the same code, prompts and test, changing only the model; about 10 minutes each (49 minutes in total).
+
+| Outcome | `qwen2.5:3b` | `qwen2.5:7b` |
+|---|---|---|
+| Verified and legitimate | 0 | 0 |
+| Verified but a loophole | 0 | 0 |
+| Edit applied, not proven (`UNVERIFIED`) | 1 | 1 |
+| Refused or incomplete, nothing applied | 4 | 4 |
+
+What changed with the bigger model:
+
+- **The failure moved from copying to adapting.** The 7B model found text that exists in the file, so "oldText not found" almost disappeared. But in four attempts it sent the same ambiguous edit 11 to 15 times ("found multiple times, provide more surrounding text") and hit the 16-iteration cap without ever adding context.
+- **Its one applied edit deleted a statement from the test, and verification caught it.** The test passed alone 20 of 20 and failed in the suite 20 of 20, so the loop reported `Failed`. A model that checked only the single-test run would have called that a success; the suite run is what exposed it.
+- **Neither model reached a proven fix**, and the pass rate alone could not have told a real fix from a loophole, which is why each applied diff is saved for a human to read.
+- **An idea, not built:** make `edit_source` report the lines where an ambiguous text occurs, so the model has something concrete to add context from. It is a separate variable and would be tested as one.
+
